@@ -1,6 +1,6 @@
 (() => {
   const $ = selector => document.querySelector(selector);
-  let socket, config = {}, state = {}, metadata = {}, sequence = 0, reconnect, filterDirty = false;
+  let socket, config = {}, state = {}, sequence = 0, reconnect, filterDirty = false;
   const pendingFilters = new Set();
   const modeSvg = body => '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'+body+'</svg>';
   const modeStroke = ' fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"';
@@ -39,19 +39,16 @@
   for (const name of ['display', 'appearance', 'lyrics']) { const p = element('div'); p.dataset.panel = name; p.hidden = name !== 'display'; form.append(p); panels[name] = p; }
   let c = card(panels.display, '位置与语言');
   field(c, 'enabled', '显示菜单栏歌词', 'checkbox');
-  const screenModeRow = field(c, 'screenMode', '显示器范围', [['primary', '主显示器'], ['all', '所有显示器']]);
-  const spaceModeRow = field(c, 'spaceMode', '桌面范围', [['all', '所有桌面与全屏空间'], ['current', '仅当前桌面']], null, '仅当前桌面固定在组件启动时所在的桌面，重启组件可重新固定');
-  field(c, 'displayMode', '歌词语言', [['translation', '译文优先'], ['original', '原文'], ['bilingualInline', '原文与译文（单行）'], ['bilingualCompact', '原文与译文（原生紧凑双行）'], ['bilingual', '原文与译文（大字号双行）']]);
+  field(c, 'displayMode', '歌词语言', [['translation', '译文优先'], ['original', '原文'], ['bilingualInline', '原文与译文（单行）'], ['bilingual', '原文与译文（双行）']]);
   field(c, 'maxWidth', '歌词最大宽度（点）', 'number', {min:128,max:800,step:1}, '按内容收缩；至少 128 点以容纳五个按钮');
   field(c, 'longLine', '长句显示', [['ellipsis','省略'],['scroll','滚动']]);
   field(c, 'scrollSpeed', '滚动速度（点/秒）', 'number', {min:8,max:100});
   field(c, 'scrollDelay', '滚动前停留（秒）', 'number', {min:0,max:8,step:.5});
-  c = card(panels.display, '显示方式'); c.append(element('p', '单行歌词完全交给 macOS 原生状态栏管理，包含跨桌面、全屏隐藏及鼠标移到顶部时随菜单栏恢复。双行歌词使用插件自己预留的右侧状态栏空间；下方范围设置只对双行模式生效。'));
+  c = card(panels.display, '显示方式'); c.append(element('p', '歌词完全使用 macOS 原生状态栏项：跨桌面、全屏隐藏及鼠标移到顶部时恢复均由系统管理。双行模式使用原生状态栏高度自动缩放两层文字。'));
   const note = element('div', '', 'note'); note.id = 'layout-note'; note.hidden = true; c.append(note);
   const permissionActions=element('div','','actions');c.append(permissionActions);
   const restart = element('button', '重启菜单栏组件'); restart.type = 'button'; restart.addEventListener('click', () => send('nativeAction', {action:'restart'})); permissionActions.append(restart);
-  c = card(panels.appearance, '字体');
-  field(c, 'fontName', '字体', 'text', {list:'fonts',placeholder:'system'}); const fonts = element('datalist'); fonts.id='fonts'; c.append(fonts);
+  c = card(panels.appearance, '文字');
   field(c, 'fontSize', '字号（点）', 'number', {min:9,max:24,step:.5}, '双行优先使用设置字号，超出实际菜单栏高度时才缩小');
   field(c, 'fontWeight', '字重', [['regular','常规'],['medium','中等'],['semibold','半粗'],['bold','粗体']]);
   c = card(panels.appearance, '歌词颜色');
@@ -63,9 +60,6 @@
   field(c, 'progressiveHighlight', '随播放进度填色', 'checkbox', null, '优先逐字时序，没有时按整句时间估算');
   field(c, 'unplayedOpacity', '未唱文字透明度', 'number', {min:.1,max:.8,step:.05});
   field(c, 'opacity', '整体不透明度', 'number', {min:.2,max:1,step:.05});
-  c = card(panels.appearance, '各屏幕独立设置'); c.append(element('p','为不同显示器单独调整宽度和字号，其他外观沿用统一设置。'));
-  const screens = element('div'); screens.id = 'screens'; screens.append(element('p','连接菜单栏组件后可设置。')); c.append(screens);
-  const clear = element('button','全部恢复统一设置'); clear.type='button'; clear.addEventListener('click',()=>patch({screenOverrides:{}})); c.append(clear);
   c = card(panels.lyrics, '同步与空白状态');
   field(c,'offsetMs','时间偏移（毫秒）','number',{min:-30000,max:30000,step:100},'正数提前，负数延后；只影响本插件');
   field(c,'idleBehavior','无歌词、间奏或过滤后',[['title','显示歌名与歌手'],['hold','保留上一句'],['hide','隐藏']]);
@@ -88,9 +82,7 @@
       else if(input.type==='number' && typeof config[input.dataset.key]==='number') input.value=formatNumber(input.dataset.key,config[input.dataset.key]);
       else input.value=config[input.dataset.key]??'';
     });
-    const doubleLine=config.displayMode==='bilingual';
-    screenModeRow.hidden=!doubleLine;spaceModeRow.hidden=!doubleLine;
-    if(!filterDirty&&document.activeElement!==filters)filters.value=(config.customFilters||[]).join('\n');renderScreens();renderColors();
+    if(!filterDirty&&document.activeElement!==filters)filters.value=(config.customFilters||[]).join('\n');renderColors();
   }
   function renderColors() {
     const mode=config.colorMode||'system';customColorRows.forEach(row=>{row.hidden=mode!=='custom';});
@@ -115,24 +107,6 @@
     document.querySelectorAll('[data-command]').forEach(b=>{b.disabled=!value.hasTrack;});
     renderColors();
   }
-  function renderScreens() {
-    clear.disabled=!Object.keys(config.screenOverrides||{}).length;
-    if(!metadata.screens?.length||screens.contains(document.activeElement))return;screens.replaceChildren();
-    metadata.screens.forEach(screen=>{
-      const group=element('section','','screen-settings'),heading=element('div','','screen-heading');
-      const override=config.screenOverrides?.[screen.id], hasOverride=!!override&&Object.keys(override).length>0;
-      heading.append(element('h3',screen.name),element('span',hasOverride?'已单独设置':'使用统一设置','badge'));group.append(heading);
-      for(const [key,title,min,max,step] of [['maxWidth','最大宽度（点）',128,800,1],['fontSize','字号（点）',9,24,.5]]){
-        const row=element('label','','field');row.append(element('span',title));
-        const input=element('input');input.type='number';input.min=min;input.max=max;input.step=step;
-        input.setAttribute('aria-label',screen.name+' '+title);input.value=formatNumber(key,override?.[key]??config[key]);
-        input.addEventListener('change',()=>{if(!input.value||!input.checkValidity()){input.reportValidity();return;}patch({screenOverrides:{...config.screenOverrides,[screen.id]:{...config.screenOverrides?.[screen.id],[key]:Number(input.value)}}});});
-        row.append(input);group.append(row);
-      }
-      if(hasOverride){const reset=element('button','此屏幕恢复统一设置');reset.type='button';reset.className='text-button';reset.addEventListener('click',()=>{const overrides={...config.screenOverrides};delete overrides[screen.id];patch({screenOverrides:overrides});});group.append(reset);}
-      screens.append(group);
-    });
-  }
   function connect() {
     if(!protocol.startsWith('echo-lyrics.')){message('请从 EchoMusic 插件设置打开此页面。',true);return;}
     socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/live',protocol);
@@ -140,7 +114,6 @@
     socket.addEventListener('message',event=>{
       let v;try{v=JSON.parse(event.data);}catch{return;}
       if(v.type==='config')applyConfig(v.config);else if(v.type==='state')renderState(v.state);
-      else if(v.type==='metadata'){metadata=v.metadata;renderScreens();fonts.replaceChildren();['system',...(metadata.fonts||[])].forEach(name=>{const o=element('option');o.value=name;fonts.append(o);});}
       else if(v.type==='nativeStatus'){note.textContent=v.text;note.hidden=!v.text;}
       else if(v.type==='ack'){if(!v.ok)message(v.error||'操作未完成，请重试',true);else if(pendingFilters.delete(v.id)){filterDirty=false;message('规则已保存');}else if(!v.dispatched)message('设置已保存');}
       else if(v.type==='preview'){preview.replaceChildren();v.lines.forEach(line=>{const row=element('div'),text=element(line.hidden?'s':'span',`${(line.startMs/1000).toFixed(1)}s  ${line.original}${line.translation?' / '+line.translation:''}`);row.append(text);preview.append(row);});message(`共 ${v.lines.length} 行，命中 ${v.lines.filter(x=>x.hidden).length} 行`);}

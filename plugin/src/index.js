@@ -11,7 +11,6 @@ export function createSession(ctx) {
   const coverColors = new CoverColorState();
   let coverTimer = null, coverExpiresAt = 0;
   const clients = new Set(), nativeClients = new Set(), listeners = new Set(), timers = [], actionTimers = new Set(), cleanups = [];
-  let metadata = null;
   const filter = new FilterRunner(), previewFilter = new FilterRunner();
   const secret = Array.from(crypto.getRandomValues(new Uint8Array(24)), x => x.toString(16).padStart(2, '0')).join('');
   const protocol = 'echo-lyrics.' + secret;
@@ -113,9 +112,6 @@ export function createSession(ctx) {
     try {
       if (message.type === 'hello') {
         if (message.role === 'native') { nativeClients.add(socket); setStatus('菜单栏组件已连接'); }
-        if (metadata) await send(socket, { type: 'metadata', metadata });
-      } else if (message.type === 'metadata' && nativeClients.has(socket)) {
-        metadata = message.metadata; broadcast({ type: 'metadata', metadata });
       } else if (message.type === 'nativeAction') {
         if (!['showSettings', 'restart'].includes(message.action)) throw new Error('未知界面操作');
         if (message.action === 'restart') await launch();

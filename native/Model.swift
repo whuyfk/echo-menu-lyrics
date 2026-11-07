@@ -1,20 +1,11 @@
 import AppKit
 import CoreText
 
-struct ScreenOverride: Codable, Equatable {
-    var maxWidth: Double?
-    var fontSize: Double?
-}
-
 struct LyricsConfig: Codable, Equatable {
     var version = 1
     var enabled = true
-    var placement = "right"
-    var screenMode = "primary"
-    var spaceMode = "all"
     var maxWidth = 280.0
     var displayMode = "translation"
-    var fontName = "system"
     var fontSize = 13.0
     var fontWeight = "medium"
     var automaticColor = true
@@ -33,7 +24,6 @@ struct LyricsConfig: Codable, Equatable {
     var pauseDelay = 10.0
     var filterCredits = true
     var customFilters: [String] = []
-    var screenOverrides: [String: ScreenOverride] = [:]
 
     var dictionary: [String: Any] {
         (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(self))) as? [String: Any] ?? [:]
@@ -43,13 +33,6 @@ struct LyricsConfig: Codable, Equatable {
         guard let data = try? JSONSerialization.data(withJSONObject: merged),
               let config = try? JSONDecoder().decode(LyricsConfig.self, from: data) else { return base }
         return config
-    }
-    func on(_ screen: NSScreen?) -> LyricsConfig {
-        guard let screen, let override = screenOverrides[screen.stableID] else { return self }
-        var result = self
-        result.maxWidth = override.maxWidth ?? maxWidth
-        result.fontSize = override.fontSize ?? fontSize
-        return result
     }
 }
 
@@ -129,15 +112,7 @@ func opticalTextBaseline(centerY: CGFloat, ink: CGRect) -> CGFloat {
 
 let bilingualLineGap: CGFloat = 0.5
 
-func lyricPanelBehavior(spaceMode: String) -> NSWindow.CollectionBehavior {
-    spaceMode == "all" ? [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle] : [.stationary, .ignoresCycle, .fullScreenNone]
-}
-
 extension NSScreen {
-    var menuRowHeight: CGFloat {
-        let reserved = frame.maxY - visibleFrame.maxY
-        return reserved >= 20 && reserved <= 64 ? reserved : NSStatusBar.system.thickness
-    }
     var stableID: String {
         String((deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0)
     }

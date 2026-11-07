@@ -1,11 +1,11 @@
 export const DEFAULTS = Object.freeze({
-  version: 1, enabled: true, placement: 'right', screenMode: 'primary', spaceMode: 'all', maxWidth: 280,
-  displayMode: 'translation', fontName: 'system', fontSize: 13, fontWeight: 'medium',
+  version: 1, enabled: true, maxWidth: 280,
+  displayMode: 'translation', fontSize: 13, fontWeight: 'medium',
   colorMode: 'system', automaticColor: true, originalColor: '#FFFFFF', translationColor: '#CDE8FF', opacity: 1,
   progressiveHighlight: true, unplayedOpacity: .35,
   longLine: 'ellipsis', scrollSpeed: 28, scrollDelay: 1.5, offsetMs: 0,
   idleBehavior: 'title', pauseBehavior: 'keep', pauseDelay: 10,
-  filterCredits: true, customFilters: [], screenOverrides: {},
+  filterCredits: true, customFilters: [],
 });
 
 // Keep the visible color stable during the host's asynchronous cover extraction.
@@ -38,12 +38,11 @@ export function sanitizeConfig(input = {}) {
     if (typeof input[key] === 'boolean') out[key] = input[key];
   const enums = {
     colorMode: ['system', 'cover', 'custom'],
-    placement: ['right'], screenMode: ['primary', 'all'],
-    spaceMode: ['current', 'all'],
-    displayMode: ['original', 'translation', 'bilingual', 'bilingualInline', 'bilingualCompact'], fontWeight: ['regular', 'medium', 'semibold', 'bold'],
+    displayMode: ['original', 'translation', 'bilingual', 'bilingualInline'], fontWeight: ['regular', 'medium', 'semibold', 'bold'],
     longLine: ['ellipsis', 'scroll'], idleBehavior: ['title', 'hold', 'hide'], pauseBehavior: ['keep', 'dim', 'hide'],
   };
   for (const [key, values] of Object.entries(enums)) if (values.includes(input[key])) out[key] = input[key];
+  if (input.displayMode === 'bilingualCompact') out.displayMode = 'bilingual';
   if (!enums.colorMode.includes(input.colorMode)) out.colorMode = input.automaticColor === false ? 'custom' : 'system';
   out.automaticColor = out.colorMode === 'system';
   const limits = { maxWidth: [128, 800], fontSize: [9, 24], opacity: [.2, 1], scrollSpeed: [8, 100],
@@ -52,18 +51,7 @@ export function sanitizeConfig(input = {}) {
     if (typeof input[key] === 'number' && Number.isFinite(input[key])) out[key] = Math.min(max, Math.max(min, input[key]));
   for (const key of ['originalColor', 'translationColor'])
     if (/^#[\da-f]{6}$/i.test(input[key] || '')) out[key] = input[key];
-  if (typeof input.fontName === 'string' && input.fontName.length <= 120) out.fontName = input.fontName;
   if (Array.isArray(input.customFilters)) out.customFilters = input.customFilters.filter(x => typeof x === 'string' && x.trim()).slice(0, 40).map(x => x.trim().slice(0, 500));
-  if (input.screenOverrides && typeof input.screenOverrides === 'object' && !Array.isArray(input.screenOverrides)) {
-    out.screenOverrides = {};
-    for (const [key, value] of Object.entries(input.screenOverrides).slice(0, 16)) {
-      if (!value || typeof value !== 'object') continue;
-      const safe = {};
-      if (Number.isFinite(value.maxWidth)) safe.maxWidth = Math.max(128, Math.min(800, value.maxWidth));
-      if (Number.isFinite(value.fontSize)) safe.fontSize = Math.max(9, Math.min(24, value.fontSize));
-      out.screenOverrides[key] = safe;
-    }
-  }
   return out;
 }
 
@@ -136,7 +124,7 @@ export function lineTiming(snapshot, lines, index, config, now) {
   const sampleAt = Number(p.clock?.sampledAt ?? p.updatedAt ?? now);
   const originalFirst = config.displayMode !== 'translation' || !line.translation;
   const inlineBilingual = config.displayMode === 'bilingualInline' && !!line.translation;
-  const doubleBilingual = (config.displayMode === 'bilingual' || config.displayMode === 'bilingualCompact') && !!line.translation;
+  const doubleBilingual = config.displayMode === 'bilingual' && !!line.translation;
   return {
     timelineMs: estimatedPlaybackMs(p, now) + Number(snapshot.lyric?.timeOffset || 0) + config.offsetMs,
     sampledAt: now, startMs: line.startMs, endMs,
@@ -189,7 +177,7 @@ export function displayState(snapshot, lines, hidden, config, now = Date.now(), 
   } else if (line && !hidden[index] && line.original) {
     base.original = line.original; base.translation = line.translation; base.reason = 'lyric';
     if (config.displayMode === 'translation') base.primary = line.translation || line.original;
-    else if (config.displayMode === 'bilingual' || config.displayMode === 'bilingualCompact') { base.primary = line.original; base.secondary = line.translation; }
+    else if (config.displayMode === 'bilingual') { base.primary = line.original; base.secondary = line.translation; }
     else if (config.displayMode === 'bilingualInline') base.primary = [line.original, line.translation].filter(Boolean).join('  ·  ');
     else base.primary = line.original;
     base.timing = lineTiming(snapshot, lines, index, config, now);

@@ -21,7 +21,6 @@ func selfTest() {
     _ = NSApplication.shared
     let config = LyricsConfig.from(["displayMode": "bilingual", "maxWidth": 320.0])
     precondition(config.displayMode == "bilingual" && config.maxWidth == 320 && config.enabled)
-    precondition(LyricsConfig().spaceMode == "all")
     let cells = compactControlFrames(in: NSRect(x: 0, y: 0, width: 500, height: 30))
     precondition(cells.count == 5 && cells[0].minX == 160 && cells[4].maxX == 340)
     let narrow = compactControlFrames(in: NSRect(x: 0, y: 0, width: 128, height: 24))
@@ -59,10 +58,7 @@ func selfTest() {
     precondition(largeSizes.0 > 12 && largeSizes.0 <= bilingualConfig.fontSize)
     let reference = CTLineCreateWithAttributedString(NSAttributedString(string: "国Agjp", attributes: [.font: NSFont.systemFont(ofSize: largeSizes.0)]))
     precondition(2 * textInkBounds(reference).height + bilingualLineGap <= 28)
-    let currentBehavior = lyricPanelBehavior(spaceMode: "current"), allBehavior = lyricPanelBehavior(spaceMode: "all")
-    precondition(!currentBehavior.contains(.canJoinAllSpaces) && !currentBehavior.contains(.moveToActiveSpace) && !currentBehavior.contains(.fullScreenAuxiliary))
-    precondition(allBehavior.contains(.canJoinAllSpaces) && allBehavior.contains(.fullScreenAuxiliary))
-    print("PASS: 30pt menus allow \(largeSizes.0)pt bilingual fonts; desktop-bound panels do not join other Spaces")
+    print("PASS: 30pt status items allow \(largeSizes.0)pt bilingual fonts")
     let controlsView = LyricView(frame: NSRect(x: 0, y: 0, width: 280, height: 30))
     var controlsState = LyricState(); controlsState.hasTrack = true
     controlsView.update(state: controlsState, config: LyricsConfig())
@@ -79,7 +75,7 @@ func selfTest() {
     let timing = PaintTiming(timelineMs: 1500, sampledAt: 1000, startMs: 1000, endMs: 3000, advancing: false, rate: 1, advanceLimitMs: 1800, primary: [], secondary: [])
     precondition(timing.progress(at: 1000) == 0 && timing.progress(at: 2000) == 0.5 && timing.progress(at: 3000) == 1)
     precondition(timing.now(Date(timeIntervalSince1970: 10)) == 1500)
-    print("PASS: status-item controls, content fitting, panel behavior, progressive timing, and config defaults")
+    print("PASS: status-item controls, content fitting, progressive timing, and config defaults")
 }
 
 func renderChecks(_ directory: String) {

@@ -15,16 +15,19 @@ const snapshot = {
 test('invalid persisted configuration is normalized, not blindly trusted', () => {
   assert.equal(sanitizeConfig(null).displayMode, 'translation');
   const value = sanitizeConfig({ maxWidth: 9999, fontSize: NaN, placement: 'center', opacity: 0, originalColor: 'red', customFilters: [null, '', '^Bass:'] });
-  assert.equal(value.maxWidth, 800); assert.equal(value.fontSize, 13); assert.equal(value.placement, 'right');
+  assert.equal(value.maxWidth, 800); assert.equal(value.fontSize, 13);
+  assert.equal(Object.hasOwn(value, 'placement'), false);
   assert.equal(value.opacity, .2); assert.equal(value.originalColor, '#FFFFFF'); assert.deepEqual(value.customFilters, ['^Bass:']);
 });
-test('display selection and desktop selection remain independent', () => {
-  const value = sanitizeConfig({ screenMode: 'primary', spaceMode: 'all' });
-  assert.equal(value.screenMode, 'primary'); assert.equal(value.spaceMode, 'all');
-  assert.equal(sanitizeConfig({ screenMode: 'all', spaceMode: 'current' }).spaceMode, 'current');
-  assert.equal(sanitizeConfig({ spaceMode: 'invalid' }).spaceMode, 'all');
-  assert.equal(sanitizeConfig({ placement: 'left' }).placement, 'right');
-  assert.equal(sanitizeConfig({ screenMode: 'active' }).screenMode, 'primary');
+test('legacy layout options are ignored and compact double mode is migrated', () => {
+  const value = sanitizeConfig({
+    placement: 'left', screenMode: 'all', spaceMode: 'current',
+    fontName: 'Menlo', screenOverrides: { screen: { fontSize: 20 } },
+    displayMode: 'bilingualCompact',
+  });
+  assert.equal(value.displayMode, 'bilingual');
+  for (const key of ['placement', 'screenMode', 'spaceMode', 'fontName', 'screenOverrides'])
+    assert.equal(Object.hasOwn(value, key), false);
 });
 test('color mode migrates old settings without losing custom colors', () => {
   assert.equal(sanitizeConfig({ automaticColor: false, originalColor: '#123456' }).colorMode, 'custom');
@@ -147,12 +150,12 @@ test('inline bilingual mode stays on one native text line', () => {
   assert.equal(state.secondary, '');
   assert.deepEqual(state.timing.primary, []);
 });
-test('compact bilingual mode keeps two native lines and translation timing', () => {
+test('bilingual mode keeps two native lines and translation timing', () => {
   const s = structuredClone(snapshot);
   s.lyric.lines[2].translatedCharacters = [{ text: '真正的歌词', startTime: 5000, endTime: 7000 }];
   const lines = normalizeLines(s), hidden = [false, false, false];
   const p = { ...s, playback: { ...s.playback, isPlaying: false, currentTime: 5 } };
-  const state = displayState(p, lines, hidden, { ...config, displayMode: 'bilingualCompact' }, 6000);
+  const state = displayState(p, lines, hidden, { ...config, displayMode: 'bilingual' }, 6000);
   assert.equal(state.primary, 'A real lyric');
   assert.equal(state.secondary, '真正的歌词');
   assert.equal(state.timing.secondary[0].start, 0);

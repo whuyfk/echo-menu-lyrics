@@ -106,10 +106,6 @@ final class LyricView: NSView {
 
     private func font(_ size: CGFloat) -> NSFont {
         let weight: NSFont.Weight = ["regular": .regular, "medium": .medium, "semibold": .semibold, "bold": .bold][config.fontWeight] ?? .medium
-        if config.fontName != "system" {
-            if let custom = NSFont(name: config.fontName, size: size) { return custom }
-            if let custom = NSFontManager.shared.font(withFamily: config.fontName, traits: [], weight: 5, size: size) { return custom }
-        }
         return NSFont.systemFont(ofSize: size, weight: weight)
     }
     private func makeLine(_ text: String, size: CGFloat) -> CTLine {
