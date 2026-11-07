@@ -28,6 +28,11 @@ func selfTest() {
     let right = lyricFrame(region: NSRect(x: 850, y: 850, width: 700, height: 32), menuEnd: 400,
                            rightBoundary: 1200, preferredWidth: 280, height: 32, alignRight: true)
     precondition(right?.maxX == 1192 && right!.minX >= 858)
+    let offlineGeometry = MenuGeometry.read(
+        MenuGeometryInput(trusted: false, ownerPID: 0, referenceTop: 0, screenFrames: [], runningPIDs: []),
+        includeExtras: true,
+        previousExtras: [])
+    precondition(!offlineGeometry.trusted && offlineGeometry.menuFrames.isEmpty && offlineGeometry.extraFrames.isEmpty)
     let config = LyricsConfig.from(["displayMode": "bilingual", "maxWidth": 320.0])
     precondition(config.displayMode == "bilingual" && config.maxWidth == 320 && config.enabled)
     precondition(LyricsConfig().spaceMode == "all")

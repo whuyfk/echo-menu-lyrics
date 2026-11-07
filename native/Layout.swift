@@ -20,11 +20,13 @@ struct MenuGeometry {
     var ownerPID: pid_t = 0
     var signature: String { "\(ownerPID)|" + (menuFrames + extraFrames).map(NSStringFromRect).joined(separator: "|") }
     static func read(includeExtras: Bool = true, previousExtras: [NSRect] = []) -> MenuGeometry {
-        var result = MenuGeometry(); result.trusted = AXIsProcessTrusted()
-        guard result.trusted, let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return result }
-        result.ownerPID = pid
+        let input = MenuGeometryInput.capture(includeExtras: includeExtras)
+        return read(input, includeExtras: includeExtras, previousExtras: previousExtras)
+    }
+    static func read(_ input: MenuGeometryInput, includeExtras: Bool, previousExtras: [NSRect]) -> MenuGeometry {
+        var result = MenuGeometry(); result.trusted = input.trusted; result.ownerPID = input.ownerPID
+        guard input.trusted, input.ownerPID != 0 else { return result }
         result.extraFrames = previousExtras
-        let referenceTop = NSScreen.screens.first?.frame.maxY ?? 0
         func attribute(_ element: AXUIElement, _ name: CFString) -> CFTypeRef? {
             var value: CFTypeRef?; return AXUIElementCopyAttributeValue(element, name, &value) == .success ? value : nil
         }
@@ -33,9 +35,9 @@ struct MenuGeometry {
                   CFGetTypeID(p) == AXValueGetTypeID(), CFGetTypeID(s) == AXValueGetTypeID() else { return nil }
             var point = CGPoint.zero, size = CGSize.zero
             guard AXValueGetValue(p as! AXValue, .cgPoint, &point), AXValueGetValue(s as! AXValue, .cgSize, &size), size.width > 0 else { return nil }
-            return NSRect(x: point.x, y: referenceTop - point.y - size.height, width: size.width, height: size.height)
+            return NSRect(x: point.x, y: input.referenceTop - point.y - size.height, width: size.width, height: size.height)
         }
-        let app = AXUIElementCreateApplication(pid); AXUIElementSetMessagingTimeout(app, 0.035)
+        let app = AXUIElementCreateApplication(input.ownerPID); AXUIElementSetMessagingTimeout(app, 0.035)
         if let value = attribute(app, kAXMenuBarAttribute as CFString), CFGetTypeID(value) == AXUIElementGetTypeID(),
            let children = attribute(value as! AXUIElement, kAXChildrenAttribute as CFString) as? [AXUIElement] {
             result.menuFrames = children.compactMap(frame)
@@ -44,14 +46,14 @@ struct MenuGeometry {
             result.extraFrames = []
             // macOS 27 hosts menu extras in MenuBarAgent rather than separate status windows.
             // Read only the public AXExtrasMenuBar positions, including third-party status items.
-            for running in NSWorkspace.shared.runningApplications {
-                let element = AXUIElementCreateApplication(running.processIdentifier)
+            for pid in input.runningPIDs {
+                let element = AXUIElementCreateApplication(pid)
                 AXUIElementSetMessagingTimeout(element, 0.04)
                 if let bar = attribute(element, "AXExtrasMenuBar" as CFString), CFGetTypeID(bar) == AXUIElementGetTypeID(),
                    let children = attribute(bar as! AXUIElement, kAXChildrenAttribute as CFString) as? [AXUIElement] {
                     result.extraFrames += children.compactMap(frame).filter { rect in
-                        rect.height >= 16 && rect.width > 0 && NSScreen.screens.contains { screen in
-                            abs(rect.maxY - screen.frame.maxY) < 6 && screen.frame.contains(NSPoint(x: rect.midX, y: rect.midY))
+                        rect.height >= 16 && rect.width > 0 && input.screenFrames.contains { frame in
+                            abs(rect.maxY - frame.maxY) < 6 && frame.contains(NSPoint(x: rect.midX, y: rect.midY))
                         }
                     }
                 }
@@ -64,14 +66,13 @@ struct MenuGeometry {
             guard let layer = info[kCGWindowLayer as String] as? Int, layer == Int(CGWindowLevelForKey(.statusWindow)),
                   let dictionary = info[kCGWindowBounds as String] as? [String: Any],
                   let raw = CGRect(dictionaryRepresentation: dictionary as CFDictionary), raw.width > 0, raw.height >= 16, raw.height <= 60 else { continue }
-            let rect = NSRect(x: raw.minX, y: referenceTop - raw.maxY, width: raw.width, height: raw.height)
-            if NSScreen.screens.contains(where: { abs(rect.maxY - $0.frame.maxY) < 6 && rect.width < $0.frame.width / 2 && $0.frame.contains(NSPoint(x: rect.midX, y: rect.midY)) }) {
+            let rect = NSRect(x: raw.minX, y: input.referenceTop - raw.maxY, width: raw.width, height: raw.height)
+            if input.screenFrames.contains(where: { abs(rect.maxY - $0.maxY) < 6 && rect.width < $0.width / 2 && $0.contains(NSPoint(x: rect.midX, y: rect.midY)) }) {
                 result.extraFrames.append(rect)
             }
         }
         var seen: Set<String> = []
         result.extraFrames = result.extraFrames.filter { seen.insert(NSStringFromRect($0)).inserted }.sorted { $0.minX < $1.minX }
-        if NSWorkspace.shared.frontmostApplication?.processIdentifier != pid { result.menuFrames = []; result.ownerPID = 0 }
         return result
     }
     func menuBand(on screen: NSScreen) -> NSRect? {
@@ -81,6 +82,23 @@ struct MenuGeometry {
     func menuEnd(on screen: NSScreen) -> CGFloat? { menuBand(on: screen)?.maxX }
     func extrasStart(on screen: NSScreen) -> CGFloat? {
         extraFrames.filter { $0.midX >= screen.frame.minX && $0.midX <= screen.frame.maxX && abs($0.maxY - screen.frame.maxY) < 6 }.map(\.minX).min()
+    }
+}
+
+struct MenuGeometryInput {
+    let trusted: Bool
+    let ownerPID: pid_t
+    let referenceTop: CGFloat
+    let screenFrames: [NSRect]
+    let runningPIDs: [pid_t]
+    static func capture(includeExtras: Bool) -> MenuGeometryInput {
+        let trusted = AXIsProcessTrusted()
+        let ownerPID = trusted ? (NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0) : 0
+        let screens = NSScreen.screens
+        return MenuGeometryInput(trusted: trusted, ownerPID: ownerPID,
+                                 referenceTop: screens.first?.frame.maxY ?? 0,
+                                 screenFrames: screens.map(\.frame),
+                                 runningPIDs: includeExtras ? NSWorkspace.shared.runningApplications.map(\.processIdentifier) : [])
     }
 }
 
@@ -107,12 +125,16 @@ final class LayoutCoordinator {
     private var lastExtras = Date.distantPast
     private var extraFrames: [NSRect] = []
     private let geometryQueue = DispatchQueue(label: "cc.echo.menu-lyrics.geometry", qos: .userInitiated)
-    private var extraReadInFlight = false
+    private var geometryInFlight = false
+    private var geometryPending = false
+    private var geometryGeneration = 0
     private var stopped = false
     private var panelSpaceMode = ""
+    private let menuPollInterval: TimeInterval = 0.75
+    private let extrasPollInterval: TimeInterval = 4
     init(controller: MenuController) { self.controller = controller }
     func start() {
-        let timer = Timer(timeInterval: 0.12, repeats: true) { [weak self] _ in self?.refreshMenus() }
+        let timer = Timer(timeInterval: menuPollInterval, repeats: true) { [weak self] _ in self?.refreshMenus() }
         self.timer = timer; RunLoop.main.add(timer, forMode: .common)
         invalidateMenus()
     }
@@ -142,10 +164,13 @@ final class LayoutCoordinator {
         observer = created; CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(created), .commonModes)
     }
     func invalidateMenus() {
+        geometryGeneration += 1
+        geometryPending = true
         panels.values.forEach { $0.orderOut(nil) }
         cachedGeometry = MenuGeometry(); stability.reset()
         deferred.forEach { $0.cancel() }; deferred.removeAll()
         observeForeground(); update()
+        requestGeometry()
         for delay in [0.02, 0.075, 0.15, 0.3, 0.6] {
             let work = DispatchWorkItem { [weak self] in self?.refreshMenus() }
             deferred.append(work); DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
@@ -155,21 +180,38 @@ final class LayoutCoordinator {
         guard let controller else { return }
         guard controller.config.placement == "left" || controller.config.screenMode != "primary" || controller.config.spaceMode == "current" || !controller.state.secondary.isEmpty else { update(); return }
         if observedPID != (NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0) { invalidateMenus(); return }
-        if !extraReadInFlight && Date().timeIntervalSince(lastExtras) > 2 {
-            extraReadInFlight = true
-            geometryQueue.async { [weak self] in
-                let extras = MenuGeometry.read().extraFrames
-                DispatchQueue.main.async {
-                    guard let self, !self.stopped else { return }
-                    self.extraReadInFlight = false; self.lastExtras = Date()
-                    self.extraFrames = extras; self.refreshMenus()
+        requestGeometry()
+    }
+    private func requestGeometry() {
+        guard let controller else { return }
+        let needsGeometry = controller.config.placement == "left" || controller.config.screenMode != "primary" || controller.config.spaceMode == "current" || !controller.state.secondary.isEmpty
+        guard needsGeometry, AXIsProcessTrusted() else {
+            cachedGeometry = MenuGeometry(); panels.values.forEach { $0.orderOut(nil) }; update(); return
+        }
+        if geometryInFlight { geometryPending = true; return }
+        geometryInFlight = true; geometryPending = false
+        let generation = geometryGeneration
+        let includeExtras = Date().timeIntervalSince(lastExtras) >= extrasPollInterval
+        let input = MenuGeometryInput.capture(includeExtras: includeExtras)
+        let previousExtras = extraFrames
+        geometryQueue.async { [weak self] in
+            let sample = MenuGeometry.read(input, includeExtras: includeExtras, previousExtras: previousExtras)
+            DispatchQueue.main.async {
+                guard let self, !self.stopped else { return }
+                self.geometryInFlight = false
+                let currentPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+                let stale = generation != self.geometryGeneration || sample.ownerPID != currentPID
+                if !stale {
+                    if includeExtras { self.lastExtras = Date(); self.extraFrames = sample.extraFrames }
+                    if self.stability.accepts(sample.signature, at: Date()) { self.cachedGeometry = sample }
+                    else { self.cachedGeometry = MenuGeometry(); self.panels.values.forEach { $0.orderOut(nil) } }
+                    self.update()
+                } else {
+                    self.geometryPending = true
                 }
+                if self.geometryPending { self.geometryPending = false; self.refreshMenus() }
             }
         }
-        let sample = MenuGeometry.read(includeExtras: false, previousExtras: extraFrames)
-        if stability.accepts(sample.signature, at: Date()) { cachedGeometry = sample }
-        else { cachedGeometry = MenuGeometry(); panels.values.forEach { $0.orderOut(nil) } }
-        update()
     }
     func update(force: Bool = false) {
         guard let controller else { return }
@@ -242,7 +284,7 @@ final class LayoutCoordinator {
         controller.statusView.update(state: state, config: local, compact: compact || width < 128)
     }
     func stop() {
-        stopped = true
+        stopped = true; geometryGeneration += 1; geometryPending = false
         timer?.invalidate(); timer = nil; deferred.forEach { $0.cancel() }; deferred.removeAll()
         if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes) }
         observer = nil; panels.values.forEach { $0.close() }; panels.removeAll()

@@ -3,7 +3,7 @@
 为 [EchoMusic](https://github.com/hoowhoami/EchoMusicPlugins) 提供原生 macOS 菜单栏歌词。
 鼠标移入歌词，原位置显示 **播放模式、上一首、播放／暂停、下一首、收藏**；移出恢复歌词。
 
-**0.2.4 开发预览版 · macOS 13+ · EchoMusic 2.3.2+ · MIT**
+**0.2.5 开发预览版 · macOS 13+ · EchoMusic 2.3.2+ · MIT**
 
 ## 功能
 
@@ -78,7 +78,7 @@ npm run check:generated
 - `plugin/src/`、`plugin/ui/`：播放器桥接、歌词逻辑及共用设置页。
 - `native/`：Swift / AppKit / Core Text 原生渲染、定位与交互。
 - `packages/echo-menu-lyrics/`：**已构建、可直接安装的插件目录**，供在线插件源从仓库 ZIP 安装。
-- `dist/echo-menu-lyrics-0.2.4-macos.zip`：本机构建的分发 ZIP，不纳入 Git。
+- `dist/echo-menu-lyrics-0.2.5-macos.zip`：本机构建的分发 ZIP，不纳入 Git。
 - `scripts/`：构建、分发准备、包校验及本地安装；`tests/`：自动检查。
 
 修改源码后运行上述完整命令，提交更新后的源码和 `packages/echo-menu-lyrics/`。
@@ -89,6 +89,8 @@ CI 会重新构建并执行 `check:generated`，确认仓库内安装包与源�
 本地试用可运行 `npm run install:local`，安装前会备份同名旧插件。
 原生组件还支持 `--self-test`、`--diagnose`、`--render-checks <目录>`；
 诊断仅输出屏幕几何与辅助功能授权状态，不输出登录信息或会话凭据。
+需要菜单边界的布局会在后台串行队列读取 AX 几何，主线程只接收通过稳定性检查的最新样本；
+常规兜底轮询为 0.75 秒，状态项目录扫描为 4 秒，AX 通知到达时会立即刷新。
 构建会把源码摘要写入原生组件；`npm run verify:package` 会用该摘要确认提交的
 二进制确实由当前源码构建。不同 Xcode／Command Line Tools 版本生成的机器码可变，
 因此 CI 对二进制检查源码摘要，对插件入口、清单和文档检查逐字一致性。
