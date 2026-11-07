@@ -62,8 +62,11 @@ final class LyricView: NSView {
         if event.modifierFlags.contains(.control) { rightMouseDown(with: event); return }
         if compact { controller?.showContextMenu(event: event, view: self); return }
         guard state.hasTrack else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        guard let index = compactControlIndex(in: bounds, at: point) else { return }
+        // NSStatusBarButton may reuse a centered event location during its tracking
+        // loop. Resolve the current pointer in screen coordinates instead so each
+        // visual button keeps its own hit target.
+        guard let window else { return }
+        guard let index = compactControlIndex(in: bounds, window: window, view: self, screenPoint: NSEvent.mouseLocation) else { return }
         controller?.command(playbackCommands[index])
     }
     override func rightMouseDown(with event: NSEvent) { controller?.showContextMenu(event: event, view: self) }

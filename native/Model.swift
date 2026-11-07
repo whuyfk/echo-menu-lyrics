@@ -103,6 +103,10 @@ func compactControlFrames(in bounds: NSRect) -> [NSRect] {
 func compactControlIndex(in bounds: NSRect, at point: NSPoint) -> Int? {
     compactControlFrames(in: bounds).firstIndex(where: { $0.contains(point) })
 }
+func compactControlIndex(in bounds: NSRect, window: NSWindow, view: NSView, screenPoint: NSPoint) -> Int? {
+    let windowPoint = window.convertPoint(fromScreen: screenPoint)
+    return compactControlIndex(in: bounds, at: view.convert(windowPoint, from: nil))
+}
 
 let playbackCommands = ["togglePlayMode", "previousTrack", "togglePlayback", "nextTrack", "toggleFavorite"]
 func playModeSymbol(_ mode: String) -> String {

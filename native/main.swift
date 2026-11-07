@@ -37,6 +37,14 @@ func selfTest() {
     let narrowBounds = NSRect(x: 0, y: 0, width: 128, height: 24)
     precondition((0..<5).allSatisfy { compactControlIndex(in: narrowBounds, at: NSPoint(x: narrow[$0].midX, y: narrow[$0].midY)) == $0 })
     precondition(compactControlIndex(in: NSRect(x: 0, y: 0, width: 128, height: 24), at: NSPoint(x: 0, y: 10)) == nil)
+    let controlWindow = NSWindow(contentRect: NSRect(x: 200, y: 200, width: 128, height: 24), styleMask: .borderless, backing: .buffered, defer: false)
+    let controlView = LyricView(frame: narrowBounds)
+    controlWindow.contentView = controlView
+    precondition((0..<5).allSatisfy {
+        let windowPoint = NSPoint(x: narrow[$0].midX, y: narrow[$0].midY)
+        return compactControlIndex(in: narrowBounds, window: controlWindow, view: controlView, screenPoint: controlWindow.convertPoint(toScreen: windowPoint)) == $0
+    })
+    controlWindow.contentView = nil
     precondition(playbackCommands.count == cells.count && playbackCommands.first == "togglePlayMode")
     precondition(contentWidth(textWidth: 35, maximum: 500) == 128)
     precondition(contentWidth(textWidth: 180, maximum: 500) == 196)
