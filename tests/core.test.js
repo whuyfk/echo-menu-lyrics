@@ -99,6 +99,14 @@ test('filtering hides paired translations without removing timestamps or early a
   assert.equal(at(1).reason, 'filtered'); assert.equal(at(1).primary, 'Song · Artist');
   assert.equal(at(2).primary, '是时候唱歌了'); assert.equal(at(5).primary, '真正的歌词');
 });
+test('pending filtering never exposes the unfiltered current line', () => {
+  const lines = normalizeLines(snapshot);
+  const state = displayState(snapshot, lines, [], config, 1000, null, null, true);
+  assert.equal(state.reason, 'filtering');
+  assert.equal(state.filterPending, true);
+  assert.equal(state.primary, 'Song · Artist');
+  assert.notEqual(state.primary, '吉他：Someone');
+});
 test('plain colons in lyrics are not treated as credits', () => {
   assert.deepEqual(evaluateFilters([{ original: 'You said: hello', translation: '' }], config), [false]);
   assert.deepEqual(evaluateFilters([{ original: 'Bass: Someone', translation: '' }], config), [true]);

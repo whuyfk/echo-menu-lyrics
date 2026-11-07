@@ -3,7 +3,7 @@
 为 [EchoMusic](https://github.com/hoowhoami/EchoMusicPlugins) 提供原生 macOS 菜单栏歌词。
 鼠标移入歌词，原位置显示 **播放模式、上一首、播放／暂停、下一首、收藏**；移出恢复歌词。
 
-**0.2.5 开发预览版 · macOS 13+ · EchoMusic 2.3.2+ · MIT**
+**0.2.6 开发预览版 · macOS 13+ · EchoMusic 2.3.2+ · MIT**
 
 ## 功能
 
@@ -12,6 +12,7 @@
 - 逐字／逐句播放填色，字体、字重、透明度、宽度和长句滚动。
 - 歌词颜色跟随系统、歌曲封面或自定义；切歌取色期间短暂保留已知颜色。
 - 内置制作人员过滤、自定义正则、当前歌曲预览及独立歌词偏移。
+- 后台过滤完成前显示歌名，不短暂展示尚未过滤的制作人员行。
 - 区分实体显示器和 macOS 桌面／全屏空间，可按显示器覆盖宽度与字号。
 - 播放器内与歌词右键打开的独立设置共用同一页面。
 
@@ -78,7 +79,7 @@ npm run check:generated
 - `plugin/src/`、`plugin/ui/`：播放器桥接、歌词逻辑及共用设置页。
 - `native/`：Swift / AppKit / Core Text 原生渲染、定位与交互。
 - `packages/echo-menu-lyrics/`：**已构建、可直接安装的插件目录**，供在线插件源从仓库 ZIP 安装。
-- `dist/echo-menu-lyrics-0.2.5-macos.zip`：本机构建的分发 ZIP，不纳入 Git。
+- `dist/echo-menu-lyrics-0.2.6-macos.zip`：本机构建的分发 ZIP，不纳入 Git。
 - `scripts/`：构建、分发准备、包校验及本地安装；`tests/`：自动检查。
 
 修改源码后运行上述完整命令，提交更新后的源码和 `packages/echo-menu-lyrics/`。

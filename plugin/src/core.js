@@ -168,19 +168,23 @@ export function findLineIndex(lines, timeMs) {
   return result;
 }
 
-export function displayState(snapshot, lines, hidden, config, now = Date.now(), lastVisible = null, pausedAt = null) {
+export function displayState(snapshot, lines, hidden, config, now = Date.now(), lastVisible = null, pausedAt = null, filterPending = false) {
   const p = snapshot?.playback;
   const trackId = String(p?.trackId ?? '');
   const base = { trackId, title: String(p?.title ?? ''), artist: String(p?.artist ?? ''),
     hasTrack: !!p?.trackId, isPlaying: !!p?.isPlaying, isFavorite: !!p?.isFavorite,
     playMode: ['sequential', 'list', 'random', 'single'].includes(p?.playMode) ? p.playMode : 'list', appearanceDark: !!snapshot?.appearance?.isDark,
     coverColor: /^#[\da-f]{6}$/i.test(snapshot?.appearance?.coverColor || '') ? snapshot.appearance.coverColor : null,
-    coverColorPending: !!snapshot?.appearance?.coverColorPending,
+    coverColorPending: !!snapshot?.appearance?.coverColorPending, filterPending: !!filterPending,
     primary: '', secondary: '', original: '', translation: '', reason: 'empty', hidden: false, dimmed: false };
   if (!p) return { ...base, primary: 'EchoMusic', reason: 'empty' };
   const index = findLineIndex(lines, estimatedPlaybackMs(p, now) + Number(snapshot.lyric?.timeOffset || 0) + config.offsetMs);
   const line = index >= 0 ? lines[index] : null;
-  if (line && !hidden[index] && line.original) {
+  if (filterPending) {
+    base.reason = 'filtering';
+    if (config.idleBehavior === 'hide') base.hidden = true;
+    else base.primary = [base.title, base.artist].filter(Boolean).join(' · ');
+  } else if (line && !hidden[index] && line.original) {
     base.original = line.original; base.translation = line.translation; base.reason = 'lyric';
     if (config.displayMode === 'translation') base.primary = line.translation || line.original;
     else if (config.displayMode === 'bilingual') { base.primary = line.original; base.secondary = line.translation; }

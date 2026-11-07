@@ -5,7 +5,7 @@ import { registerSettings } from './settings.js';
 export function createSession(ctx) {
   let config = sanitizeConfig(), snapshot = {}, lines = [], hidden = [], signature = '';
   let lastVisible = null, pausedAt = null, lastPlaying = null, disposed = false, helperPid = 0;
-  let server = null, filterGeneration = 0, currentState = null, status = '正在初始化…', launching = false;
+  let server = null, filterGeneration = 0, filterPending = false, currentState = null, status = '正在初始化…', launching = false;
   let launchGeneration = 0, configureQueue = Promise.resolve();
   let tickTimer = null;
   const coverColors = new CoverColorState();
@@ -30,7 +30,7 @@ export function createSession(ctx) {
       clearTimeout(coverTimer); coverExpiresAt = cover.expiresAt;
       coverTimer = cover.expiresAt ? setTimeout(emit, Math.max(1, cover.expiresAt - now)) : null;
     }
-    const state = displayState({ ...snapshot, appearance: { ...snapshot.appearance, coverColor: cover.color, coverColorPending: cover.pending }, playback: snapshot.playback ? { ...snapshot.playback, playMode } : null }, lines, hidden, config, now, lastVisible, pausedAt);
+    const state = displayState({ ...snapshot, appearance: { ...snapshot.appearance, coverColor: cover.color, coverColorPending: cover.pending }, playback: snapshot.playback ? { ...snapshot.playback, playMode } : null }, lines, hidden, config, now, lastVisible, pausedAt, filterPending);
     if (state.reason === 'lyric') lastVisible = state;
     const text = JSON.stringify(state);
     if (text !== currentState) { currentState = text; broadcast({ type: 'state', state }); notify(); }
@@ -42,17 +42,18 @@ export function createSession(ctx) {
   };
   const refilter = async () => {
     const generation = ++filterGeneration;
+    filterPending = true;
     hidden = lines.map(() => false);
     try {
       const results = await filter.run(lines, config);
-      if (!disposed && generation === filterGeneration) { hidden = results; emit(); }
+      if (!disposed && generation === filterGeneration) { hidden = results; filterPending = false; emit(); }
     } catch (error) {
       if (error.name === 'AbortError' || disposed || generation !== filterGeneration) return;
       // Safe built-in rules remain usable if a custom expression exceeds its budget.
       let fallback;
       try { fallback = await filter.run(lines, { ...config, customFilters: [] }); } catch { fallback = lines.map(() => false); }
       if (disposed || generation !== filterGeneration) return;
-      hidden = fallback; setStatus(error.message); emit();
+      hidden = fallback; filterPending = false; setStatus(error.message); emit();
     }
   };
   const receiveSnapshot = value => {
