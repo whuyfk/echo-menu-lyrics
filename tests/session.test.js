@@ -17,6 +17,15 @@ function fixture(overrides = {}) {
   return { ctx, data, socket, snapshot };
 }
 const turn = () => new Promise(resolve => setTimeout(resolve, 25));
+async function waitForMessage(socket, type, timeoutMs = 1500) {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const message = socket.messages.find(value => value.type === type);
+    if (message) return message;
+    await turn();
+  } while (Date.now() < deadline);
+  throw new Error(`Timed out waiting for ${type}`);
+}
 
 test('session authenticates connections, rejects stale commands, and cleans up', async () => {
   const { ctx, data, socket } = fixture(); const session = createSession(ctx);
@@ -47,8 +56,8 @@ test('both settings entrances share the same page and settings clients cannot im
     socket.receive({ data: JSON.stringify({ type: 'nativeStatus', text: 'spoofed' }) });
     await turn(); assert.notEqual(session.status, 'spoofed');
     socket.receive({ data: JSON.stringify({ type: 'preview', patterns: [], id: 'preview' }) });
-    await turn();
-    assert.equal(socket.messages.find(x => x.type === 'preview')?.lines[0].translation, '你好');
+    const preview = await waitForMessage(socket, 'preview');
+    assert.equal(preview.lines[0].translation, '你好');
   } finally { await session.dispose(); }
 });
 test('all five controls dispatch, play mode follows the player, and rejected commands fail', async () => {
