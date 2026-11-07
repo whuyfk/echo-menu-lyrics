@@ -102,21 +102,18 @@ func renderChecks(_ directory: String) {
         ("alignment-cjk", "改变自己 · 王力宏", "", 4000, false, 180),
         ("alignment-latin", "Can't stop you can't hold you", "", 4000, false, 230),
         ("alignment-bilingual", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
-        ("bilingual-panel-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
-        ("bilingual-status-22", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
-        ("bilingual-large-panel-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
-        ("bilingual-large-status-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
+        ("bilingual-native-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
+        ("bilingual-compact-22", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
+        ("bilingual-large-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
     ]
     for (name, primary, secondary, progress, hover, width) in cases {
-        let height: CGFloat = name == "bilingual-status-22" ? 22 : 30
+        let height: CGFloat = name == "bilingual-compact-22" ? 22 : 30
         let view = LyricView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        if name == "bilingual-panel-30" || name == "bilingual-status-22" { view.textLayoutHeight = 22 }
-        if name.hasPrefix("bilingual-large-") { view.textLayoutHeight = 30 }
         var state = LyricState(); state.primary = primary; state.secondary = secondary; state.reason = "lyric"; state.hasTrack = true; state.isPlaying = true
         if name.hasPrefix("hover-mode-") { state.playMode = String(name.dropFirst("hover-mode-".count)); state.isFavorite = true }
         state.timing = PaintTiming(timelineMs: progress, sampledAt: 0, startMs: 0, endMs: 4000, advancing: false, rate: 1, advanceLimitMs: 0, primary: [], secondary: [])
         var localConfig = config
-        if name.hasPrefix("alignment-") || name.hasPrefix("bilingual-panel") || name.hasPrefix("bilingual-status") || name.hasPrefix("bilingual-large-") { localConfig.fontSize = 14 }
+        if name.hasPrefix("alignment-") || name.hasPrefix("bilingual-") { localConfig.fontSize = 14 }
         if name.hasPrefix("cover-") { localConfig.colorMode = "cover" }
         if name == "cover-color" { state.coverColor = "#4C8DB2" }
         view.update(state: state, config: localConfig); view.hovered = hover

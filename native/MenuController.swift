@@ -78,7 +78,7 @@ final class MenuController: NSObject {
         if demo {
             config = LyricsConfig.from(values, base: config)
             if config.displayMode == "original" { state.primary = state.original; state.secondary = "" }
-            else if config.displayMode == "bilingual" { state.primary = state.original; state.secondary = state.translation }
+            else if config.displayMode == "bilingual" || config.displayMode == "bilingualCompact" { state.primary = state.original; state.secondary = state.translation }
             else if config.displayMode == "bilingualInline" { state.primary = [state.original, state.translation].filter { !$0.isEmpty }.joined(separator: "  ·  "); state.secondary = "" }
             else { state.primary = state.translation; state.secondary = "" }
             layout.update(force: true)
@@ -111,7 +111,7 @@ final class MenuController: NSObject {
             let item = NSMenuItem(title: text, action: nil, keyEquivalent: ""); item.isEnabled = false; menu.addItem(item)
         }
         if !state.original.isEmpty { menu.addItem(.separator()) }
-        for (mode, title) in [("original", "显示原文"), ("translation", "译文优先"), ("bilingualInline", "双语单行"), ("bilingual", "双语双行")] {
+        for (mode, title) in [("original", "显示原文"), ("translation", "译文优先"), ("bilingualInline", "双语单行"), ("bilingualCompact", "原生紧凑双行"), ("bilingual", "大字号双行")] {
             let item = NSMenuItem(title: title, action: #selector(setMode(_:)), keyEquivalent: "")
             item.target = self; item.representedObject = mode; item.state = config.displayMode == mode ? .on : .off; menu.addItem(item)
         }

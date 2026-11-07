@@ -41,7 +41,7 @@
   field(c, 'enabled', '显示菜单栏歌词', 'checkbox');
   const screenModeRow = field(c, 'screenMode', '显示器范围', [['primary', '主显示器'], ['all', '所有显示器']]);
   const spaceModeRow = field(c, 'spaceMode', '桌面范围', [['all', '所有桌面与全屏空间'], ['current', '仅当前桌面']], null, '仅当前桌面固定在组件启动时所在的桌面，重启组件可重新固定');
-  field(c, 'displayMode', '歌词语言', [['translation', '译文优先'], ['original', '原文'], ['bilingualInline', '原文与译文（单行）'], ['bilingual', '原文与译文（双行）']]);
+  field(c, 'displayMode', '歌词语言', [['translation', '译文优先'], ['original', '原文'], ['bilingualInline', '原文与译文（单行）'], ['bilingualCompact', '原文与译文（原生紧凑双行）'], ['bilingual', '原文与译文（大字号双行）']]);
   field(c, 'maxWidth', '歌词最大宽度（点）', 'number', {min:128,max:800,step:1}, '按内容收缩；至少 128 点以容纳五个按钮');
   field(c, 'longLine', '长句显示', [['ellipsis','省略'],['scroll','滚动']]);
   field(c, 'scrollSpeed', '滚动速度（点/秒）', 'number', {min:8,max:100});

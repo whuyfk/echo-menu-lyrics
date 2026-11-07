@@ -147,6 +147,16 @@ test('inline bilingual mode stays on one native text line', () => {
   assert.equal(state.secondary, '');
   assert.deepEqual(state.timing.primary, []);
 });
+test('compact bilingual mode keeps two native lines and translation timing', () => {
+  const s = structuredClone(snapshot);
+  s.lyric.lines[2].translatedCharacters = [{ text: '真正的歌词', startTime: 5000, endTime: 7000 }];
+  const lines = normalizeLines(s), hidden = [false, false, false];
+  const p = { ...s, playback: { ...s.playback, isPlaying: false, currentTime: 5 } };
+  const state = displayState(p, lines, hidden, { ...config, displayMode: 'bilingualCompact' }, 6000);
+  assert.equal(state.primary, 'A real lyric');
+  assert.equal(state.secondary, '真正的歌词');
+  assert.equal(state.timing.secondary[0].start, 0);
+});
 test('offset layers once, pause timeout works, previous track is never held', () => {
   const lines = normalizeLines(snapshot);
   const p = { ...snapshot, playback: { ...snapshot.playback, isPlaying: false, currentTime: 1 }, lyric: { ...snapshot.lyric, timeOffset: 500 } };
