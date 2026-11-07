@@ -75,6 +75,19 @@ func selfTest() {
     precondition(!currentBehavior.contains(.canJoinAllSpaces) && !currentBehavior.contains(.moveToActiveSpace) && !currentBehavior.contains(.fullScreenAuxiliary))
     precondition(allBehavior.contains(.canJoinAllSpaces) && allBehavior.contains(.fullScreenAuxiliary))
     print("PASS: 30pt menus allow \(largeSizes.0)pt bilingual fonts; desktop-bound panels do not join other Spaces")
+    let controlsView = LyricView(frame: NSRect(x: 0, y: 0, width: 280, height: 30))
+    var controlsState = LyricState(); controlsState.hasTrack = true
+    controlsView.update(state: controlsState, config: LyricsConfig())
+    precondition(controlsView.visiblePlaybackCommands.isEmpty)
+    controlsView.hovered = true
+    controlsView.update(state: controlsState, config: LyricsConfig())
+    precondition(controlsView.visiblePlaybackCommands == playbackCommands)
+    controlsView.update(state: controlsState, config: LyricsConfig(), compact: true)
+    precondition(controlsView.visiblePlaybackCommands.isEmpty)
+    controlsState.hasTrack = false
+    controlsView.update(state: controlsState, config: LyricsConfig())
+    precondition(controlsView.visiblePlaybackCommands.isEmpty)
+    print("PASS: hover controls only expose five actions when visible, expanded and playable")
     var stability = MenuStability(); let now = Date()
     precondition(!stability.accepts("app1:500", at: now))
     precondition(stability.accepts("app1:500", at: now.addingTimeInterval(0.04)))

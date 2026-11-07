@@ -20,11 +20,14 @@ final class LyricView: NSView {
     private var animation: Timer?
     private var lineStarted = ProcessInfo.processInfo.systemUptime
     private var textKey = ""
+    private var controlsWereVisible = false
     private lazy var controls: [NSButton] = playbackCommands.enumerated().map { index, command in
         let button = PlaybackButton(title: "", target: self, action: #selector(activateControl(_:)))
         button.tag = index; button.isBordered = false; button.isHidden = true
         addSubview(button); return button
     }
+    var showsPlaybackControls: Bool { hovered && !compact && state.hasTrack }
+    var visiblePlaybackCommands: [String] { showsPlaybackControls ? playbackCommands : [] }
     override var acceptsFirstResponder: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var isOpaque: Bool { false }
@@ -33,20 +36,39 @@ final class LyricView: NSView {
         let key = state.trackId + "|" + state.primary + "|" + state.secondary
         if key != textKey { textKey = key; lineStarted = ProcessInfo.processInfo.systemUptime }
         self.state = state; self.config = config; self.compact = compact
-        toolTip = hovered ? "播放模式：\(playModeTitle(state.playMode))；上一首；播放／暂停；下一首；收藏" : nil
         setAccessibilityElement(true); setAccessibilityRole(.group)
-        setAccessibilityLabel(compact ? "EchoMusic 菜单栏歌词设置" : [state.primary, state.secondary].filter { !$0.isEmpty }.joined(separator: "，"))
         updateControls(); needsDisplay = true; updateAnimation()
     }
     private func updateControls() {
         let titles = ["播放模式：\(playModeTitle(state.playMode))（点击切换）", "上一首", state.isPlaying ? "暂停" : "播放", "下一首", state.isFavorite ? "取消收藏" : "收藏"]
         let frames = compactControlFrames(in: bounds)
+        let visible = showsPlaybackControls
+        let visibilityChanged = visible != controlsWereVisible
+        controlsWereVisible = visible
         for (index, button) in controls.enumerated() {
             button.frame = frames[index]; button.isEnabled = state.hasTrack
-            button.isHidden = compact
+            button.isHidden = !visible
             button.setAccessibilityLabel(titles[index]); button.toolTip = titles[index]
+            button.setAccessibilityEnabled(state.hasTrack)
         }
-        setAccessibilityChildren(controls.filter { !$0.isHidden })
+        setAccessibilityChildren(visible ? controls : [])
+        setAccessibilityRole(compact || visible ? .group : .button)
+        let lyric = [state.primary, state.secondary].filter { !$0.isEmpty }.joined(separator: "，")
+        let label: String
+        if compact {
+            label = "EchoMusic 菜单栏歌词设置"
+        } else if visible {
+            label = "播放控制"
+        } else if state.hasTrack {
+            label = "歌词：\(lyric)；显示播放控制"
+        } else {
+            label = lyric.isEmpty ? "EchoMusic 菜单栏歌词" : "歌词：\(lyric)"
+        }
+        setAccessibilityLabel(label)
+        setAccessibilityHelp(visible ? "播放模式、上一首、播放或暂停、下一首和收藏。" : (state.hasTrack && !compact ? "按下以显示播放控制。" : nil))
+        setAccessibilityEnabled(state.hasTrack && !compact)
+        toolTip = visible ? "播放模式：\(playModeTitle(state.playMode))；上一首；播放／暂停；下一首；收藏" : nil
+        if visibilityChanged && window != nil { NSAccessibility.post(element: self, notification: .layoutChanged) }
     }
     @objc private func activateControl(_ sender: NSButton) { controller?.command(playbackCommands[sender.tag]) }
     override func layout() { super.layout(); updateControls() }
@@ -56,12 +78,18 @@ final class LyricView: NSView {
         let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
         addTrackingArea(area); tracking = area
     }
-    override func mouseEntered(with event: NSEvent) { hovered = true; updateControls(); needsDisplay = true; updateAnimation() }
-    override func mouseExited(with event: NSEvent) { hovered = false; updateControls(); needsDisplay = true; updateAnimation(); controller?.layout.update() }
+    private func setHovered(_ value: Bool) {
+        guard hovered != value else { return }
+        hovered = value; updateControls(); needsDisplay = true; updateAnimation()
+        if !hovered { controller?.layout.update() }
+    }
+    override func mouseEntered(with event: NSEvent) { setHovered(true) }
+    override func mouseExited(with event: NSEvent) { setHovered(false) }
     override func mouseDown(with event: NSEvent) {
         if event.modifierFlags.contains(.control) { rightMouseDown(with: event); return }
         if compact { controller?.showContextMenu(event: event, view: self); return }
         guard state.hasTrack else { return }
+        guard showsPlaybackControls else { setHovered(true); return }
         // NSStatusBarButton may reuse a centered event location during its tracking
         // loop. Resolve the current pointer in screen coordinates instead so each
         // visual button keeps its own hit target.
@@ -70,7 +98,11 @@ final class LyricView: NSView {
         controller?.command(playbackCommands[index])
     }
     override func rightMouseDown(with event: NSEvent) { controller?.showContextMenu(event: event, view: self) }
-    override func accessibilityPerformPress() -> Bool { hovered = true; updateControls(); needsDisplay = true; updateAnimation(); return true }
+    override func accessibilityPerformPress() -> Bool {
+        guard state.hasTrack, !compact else { return false }
+        setHovered(!hovered)
+        return true
+    }
 
     private func font(_ size: CGFloat) -> NSFont {
         let weight: NSFont.Weight = ["regular": .regular, "medium": .medium, "semibold": .semibold, "bold": .bold][config.fontWeight] ?? .medium
@@ -127,7 +159,7 @@ final class LyricView: NSView {
         let originalColor: NSColor = config.colorMode == "cover" ? (coverColor ?? .labelColor) : config.automaticColor ? .labelColor : NSColor(hex: config.originalColor)
         let translationColor: NSColor = config.colorMode == "cover" ? (coverColor ?? .labelColor) : config.automaticColor ? .labelColor : NSColor(hex: config.translationColor)
         if compact { return }
-        if hovered {
+        if showsPlaybackControls {
             let frames = compactControlFrames(in: bounds)
             if let first = frames.first, let last = frames.last {
                 NSColor.labelColor.withAlphaComponent(0.08).setFill()
