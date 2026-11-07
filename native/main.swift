@@ -141,7 +141,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) { controller?.stop() }
 }
 
-if CommandLine.arguments.contains("--diagnose") { diagnostics() }
+if CommandLine.arguments.contains("--build-info") {
+    let data: [String: String] = ["version": buildVersion, "sourceDigest": buildSourceDigest]
+    if let json = try? JSONSerialization.data(withJSONObject: data, options: [.sortedKeys]) { print(String(decoding: json, as: UTF8.self)) }
+}
+else if CommandLine.arguments.contains("--diagnose") { diagnostics() }
 else if CommandLine.arguments.contains("--self-test") { selfTest() }
 else if let index = CommandLine.arguments.firstIndex(of: "--render-checks"), CommandLine.arguments.count > index + 1 { renderChecks(CommandLine.arguments[index + 1]) }
 else {

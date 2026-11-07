@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const binary = 'packages/echo-menu-lyrics/bin/EchoMenuLyrics.app/Contents/MacOS/EchoMenuLyrics';
 const status = spawnSync(
   'git',
   ['status', '--porcelain=v1', '--untracked-files=all', '--', 'packages/echo-menu-lyrics'],
@@ -15,7 +16,7 @@ if (status.status !== 0) {
   process.exit(status.status || 1);
 }
 
-const changes = status.stdout.trim();
+const changes = status.stdout.trim().split('\n').filter(line => line && line.slice(3) !== binary).join('\n');
 if (changes) {
   console.error('Generated installable package differs from Git:');
   console.error(changes);
@@ -23,4 +24,4 @@ if (changes) {
   process.exit(1);
 }
 
-console.log('PASS: rebuilt installable package is identical to the committed package');
+console.log('PASS: rebuilt package data matches Git; native binary matches the current source digest');

@@ -3,8 +3,10 @@ import { readFile, stat, readdir } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { computeSourceDigest } from './source-digest.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const sourceDigest = await computeSourceDigest(root);
 const registry = JSON.parse(await readFile(path.join(root, 'echo-plugins.json'), 'utf8'));
 const entry = registry.plugins.find(value => value.id === 'echo-menu-lyrics');
 assert.ok(entry); assert.equal(entry.repo, 'https://github.com/whuyfk/echo-menu-lyrics');
@@ -25,5 +27,11 @@ if (process.platform === 'darwin') {
   assert.equal(arch.status, 0); assert.match(arch.stdout, /arm64/); assert.match(arch.stdout, /x86_64/);
   const signature = spawnSync('codesign', ['--verify', '--deep', '--strict', path.join(directory, 'bin/EchoMenuLyrics.app')], { encoding: 'utf8' });
   assert.equal(signature.status, 0, signature.stderr);
+  const committedInfo = spawnSync('plutil', ['-extract', 'EchoMenuLyricsSourceDigest', 'raw', path.join(directory, 'bin/EchoMenuLyrics.app/Contents/Info.plist')], { encoding: 'utf8' });
+  assert.equal(committedInfo.status, 0, committedInfo.stderr);
+  assert.equal(committedInfo.stdout.trim(), sourceDigest, 'installation Info.plist was built from different sources');
+  const buildInfo = spawnSync(executable, ['--build-info'], { encoding: 'utf8' });
+  assert.equal(buildInfo.status, 0, buildInfo.stderr);
+  assert.deepEqual(JSON.parse(buildInfo.stdout), { sourceDigest, version: manifest.version });
 }
 console.log('PASS: registry path, manifest, entry syntax, universal executable, permissions and package contents');

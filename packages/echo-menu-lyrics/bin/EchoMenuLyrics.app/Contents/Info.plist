@@ -8,6 +8,7 @@
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.2.2</string>
 <key>CFBundleVersion</key><string>4</string>
+<key>EchoMenuLyricsSourceDigest</key><string>8a38632547b9bc9f981f2443718d087de835c03debe11ac17a6f1d7f4a6e9d38</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>

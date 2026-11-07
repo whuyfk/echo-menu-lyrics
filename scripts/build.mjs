@@ -2,11 +2,13 @@ import { readFile, writeFile, mkdir, cp, chmod } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { computeSourceDigest } from './source-digest.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'dist/echo-menu-lyrics');
 const app = path.join(out, 'bin/EchoMenuLyrics.app');
 const manifest = JSON.parse(await readFile(path.join(root, 'plugin/manifest.json'), 'utf8'));
+const sourceDigest = await computeSourceDigest(root);
 await mkdir(path.join(app, 'Contents/MacOS'), { recursive: true });
 await mkdir(path.join(root, '.build'), { recursive: true });
 const style = await readFile(path.join(root, 'plugin/ui/settings.css'), 'utf8');
@@ -23,7 +25,9 @@ await writeFile(path.join(out, 'index.js'), entry);
 await cp(path.join(root, 'plugin/manifest.json'), path.join(out, 'manifest.json'));
 await cp(path.join(root, 'plugin/icon.svg'), path.join(out, 'icon.svg'));
 if (process.argv.includes('--js-only')) { console.log(`Updated plugin entry: ${out}`); process.exit(0); }
-const sources = ['Model', 'Connection', 'LyricView', 'Layout', 'MenuController', 'main'].map(name => path.join(root, `native/${name}.swift`));
+const buildInfo = path.join(root, '.build/BuildInfo.swift');
+await writeFile(buildInfo, `let buildSourceDigest = ${JSON.stringify(sourceDigest)}\nlet buildVersion = ${JSON.stringify(manifest.version)}\n`);
+const sources = [buildInfo, ...['Model', 'Connection', 'LyricView', 'Layout', 'MenuController', 'main'].map(name => path.join(root, `native/${name}.swift`))];
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: root, stdio: 'inherit' });
   if (result.error) throw result.error;
@@ -50,6 +54,7 @@ await writeFile(path.join(app, 'Contents/Info.plist'), `<?xml version="1.0" enco
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>${manifest.version}</string>
 <key>CFBundleVersion</key><string>4</string>
+<key>EchoMenuLyricsSourceDigest</key><string>${sourceDigest}</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
