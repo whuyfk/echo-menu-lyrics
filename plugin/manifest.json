@@ -1,7 +1,7 @@
 {
   "id": "echo-menu-lyrics",
   "name": "Mac 菜单栏歌词",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "macOS 菜单栏同步歌词、双语翻译、悬停播放控制及正则过滤。",
   "author": "whuyfk",
   "homepage": "https://github.com/whuyfk/echo-menu-lyrics",

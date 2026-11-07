@@ -44,8 +44,9 @@ final class LayoutCoordinator {
     private var usesPanels: Bool {
         guard let controller else { return false }
         let config = controller.config, state = controller.state
-        return config.enabled && !state.hidden &&
-            (config.screenMode != "primary" || config.spaceMode == "current" || (config.displayMode == "bilingual" && !state.secondary.isEmpty))
+        // Single-line modes stay on the native status item so macOS owns
+        // their Space and full-screen visibility.
+        return config.enabled && !state.hidden && config.displayMode == "bilingual" && !state.secondary.isEmpty
     }
 
     private func targetScreens(config: LyricsConfig) -> [NSScreen] {

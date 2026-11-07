@@ -39,14 +39,14 @@
   for (const name of ['display', 'appearance', 'lyrics']) { const p = element('div'); p.dataset.panel = name; p.hidden = name !== 'display'; form.append(p); panels[name] = p; }
   let c = card(panels.display, '位置与语言');
   field(c, 'enabled', '显示菜单栏歌词', 'checkbox');
-  field(c, 'screenMode', '显示器范围', [['primary', '主显示器'], ['all', '所有显示器']]);
-  field(c, 'spaceMode', '桌面范围', [['all', '所有桌面与全屏空间'], ['current', '仅当前桌面']], null, '仅当前桌面固定在组件启动时所在的桌面，重启组件可重新固定');
+  const screenModeRow = field(c, 'screenMode', '显示器范围', [['primary', '主显示器'], ['all', '所有显示器']]);
+  const spaceModeRow = field(c, 'spaceMode', '桌面范围', [['all', '所有桌面与全屏空间'], ['current', '仅当前桌面']], null, '仅当前桌面固定在组件启动时所在的桌面，重启组件可重新固定');
   field(c, 'displayMode', '歌词语言', [['translation', '译文优先'], ['original', '原文'], ['bilingualInline', '原文与译文（单行）'], ['bilingual', '原文与译文（双行）']]);
   field(c, 'maxWidth', '歌词最大宽度（点）', 'number', {min:128,max:800,step:1}, '按内容收缩；至少 128 点以容纳五个按钮');
   field(c, 'longLine', '长句显示', [['ellipsis','省略'],['scroll','滚动']]);
   field(c, 'scrollSpeed', '滚动速度（点/秒）', 'number', {min:8,max:100});
   field(c, 'scrollDelay', '滚动前停留（秒）', 'number', {min:0,max:8,step:.5});
-  c = card(panels.display, '显示方式'); c.append(element('p', '歌词始终停靠在右侧状态栏区域。“所有桌面 + 主显示器”的单行模式直接使用 macOS 原生状态栏项；仅当前桌面、指定屏幕和双行模式覆盖插件自己预留的状态栏空间，不需要辅助功能权限。'));
+  c = card(panels.display, '显示方式'); c.append(element('p', '单行歌词完全交给 macOS 原生状态栏管理，包含跨桌面、全屏隐藏及鼠标移到顶部时随菜单栏恢复。双行歌词使用插件自己预留的右侧状态栏空间；下方范围设置只对双行模式生效。'));
   const note = element('div', '', 'note'); note.id = 'layout-note'; note.hidden = true; c.append(note);
   const permissionActions=element('div','','actions');c.append(permissionActions);
   const restart = element('button', '重启菜单栏组件'); restart.type = 'button'; restart.addEventListener('click', () => send('nativeAction', {action:'restart'})); permissionActions.append(restart);
@@ -88,6 +88,8 @@
       else if(input.type==='number' && typeof config[input.dataset.key]==='number') input.value=formatNumber(input.dataset.key,config[input.dataset.key]);
       else input.value=config[input.dataset.key]??'';
     });
+    const doubleLine=config.displayMode==='bilingual';
+    screenModeRow.hidden=!doubleLine;spaceModeRow.hidden=!doubleLine;
     if(!filterDirty&&document.activeElement!==filters)filters.value=(config.customFilters||[]).join('\n');renderScreens();renderColors();
   }
   function renderColors() {
