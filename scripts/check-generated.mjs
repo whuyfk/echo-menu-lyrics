@@ -16,7 +16,10 @@ if (status.status !== 0) {
   process.exit(status.status || 1);
 }
 
-const changes = status.stdout.trim().split('\n').filter(line => line && line.slice(3) !== binary).join('\n');
+const changes = status.stdout
+  .split(/\r?\n/)
+  .filter(line => line && !line.endsWith(binary))
+  .join('\n');
 if (changes) {
   console.error('Generated installable package differs from Git:');
   console.error(changes);
