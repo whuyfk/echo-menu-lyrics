@@ -113,6 +113,7 @@ final class MenuController: NSObject {
             let webView = WKWebView(frame: .zero)
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 740), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
             window.contentView = webView
+            window.backgroundColor = .windowBackgroundColor
             if let settingsURL { webView.load(URLRequest(url: settingsURL)) }
             else { webView.loadHTMLString("<p style='font:14px -apple-system;padding:24px'>请从 EchoMusic 插件管理启动，以打开统一设置页面。</p>", baseURL: nil) }
             window.title = "EchoMusic 菜单栏歌词"

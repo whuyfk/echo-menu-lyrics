@@ -3,7 +3,7 @@
 为 [EchoMusic](https://github.com/hoowhoami/EchoMusicPlugins) 提供 macOS 原生状态栏歌词。
 鼠标移入歌词，原位置显示 **播放模式、上一首、播放／暂停、下一首、收藏**；移出恢复歌词。
 
-**0.4.1 开发预览版 · macOS 13+ · EchoMusic 2.3.2+ · MIT**
+**0.4.2 开发预览版 · macOS 13+ · EchoMusic 2.3.2+ · MIT**
 
 ## 功能
 
@@ -84,7 +84,7 @@ npm run check:generated
 - `plugin/src/`、`plugin/ui/`：播放器桥接、歌词逻辑及共用设置页。
 - `native/`：Swift / AppKit / Core Text 原生渲染与状态栏交互。
 - `packages/echo-menu-lyrics/`：可直接安装的构建目录，供在线插件源从仓库 ZIP 提取。
-- `dist/echo-menu-lyrics-0.4.1-macos.zip`：本机构建的分发 ZIP，不纳入 Git。
+- `dist/echo-menu-lyrics-0.4.2-macos.zip`：本机构建的分发 ZIP，不纳入 Git。
 - `scripts/`：构建、打包、校验及本地安装；`tests/`：自动检查。
 
 修改源码后运行上述完整命令，提交源码和更新后的 `packages/echo-menu-lyrics/`。

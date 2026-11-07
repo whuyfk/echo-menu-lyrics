@@ -1,5 +1,4 @@
 (() => {
-  if (window.top === window) document.documentElement.classList.add('standalone');
   const $ = selector => document.querySelector(selector);
   let socket, config = {}, state = {}, sequence = 0, reconnect, filterDirty = false;
   const pendingFilters = new Set();
@@ -110,14 +109,14 @@
   function connect() {
     if(!protocol.startsWith('echo-lyrics.')){message('请从 EchoMusic 插件设置打开此页面。',true);return;}
     socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/live',protocol);
-    socket.addEventListener('open',()=>{$('#connection').textContent='已连接';send('hello',{role:'settings'});});
+    socket.addEventListener('open',()=>{send('hello',{role:'settings'});});
     socket.addEventListener('message',event=>{
       let v;try{v=JSON.parse(event.data);}catch{return;}
       if(v.type==='config')applyConfig(v.config);else if(v.type==='state')renderState(v.state);
       else if(v.type==='ack'){if(!v.ok)message(v.error||'操作未完成，请重试',true);else if(pendingFilters.delete(v.id)){filterDirty=false;message('规则已保存');}else if(!v.dispatched)message('设置已保存');}
       else if(v.type==='preview'){preview.replaceChildren();v.lines.forEach(line=>{const row=element('div'),text=element(line.hidden?'s':'span',`${(line.startMs/1000).toFixed(1)}s  ${line.original}${line.translation?' / '+line.translation:''}`);row.append(text);preview.append(row);});message(`共 ${v.lines.length} 行，命中 ${v.lines.filter(x=>x.hidden).length} 行`);}
     });
-    socket.addEventListener('close',()=>{$('#connection').textContent='重新连接中';clearTimeout(reconnect);reconnect=setTimeout(connect,1500);});
+    socket.addEventListener('close',()=>{message('连接中断，正在重新连接…',true);clearTimeout(reconnect);reconnect=setTimeout(connect,1500);});
     socket.addEventListener('error',()=>message('连接中断，正在重试…',true));
   }
   form.addEventListener('submit',event=>event.preventDefault());
