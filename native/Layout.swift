@@ -51,9 +51,6 @@ final class LayoutCoordinator {
     private func targetScreens(config: LyricsConfig) -> [NSScreen] {
         let primary = NSScreen.screens.first
         if config.screenMode == "all" { return NSScreen.screens }
-        if config.screenMode == "active" {
-            return [NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? primary].compactMap { $0 }
-        }
         return [primary].compactMap { $0 }
     }
 

@@ -38,7 +38,7 @@ export function sanitizeConfig(input = {}) {
     if (typeof input[key] === 'boolean') out[key] = input[key];
   const enums = {
     colorMode: ['system', 'cover', 'custom'],
-    placement: ['right'], screenMode: ['primary', 'active', 'all'],
+    placement: ['right'], screenMode: ['primary', 'all'],
     spaceMode: ['current', 'all'],
     displayMode: ['original', 'translation', 'bilingual', 'bilingualInline'], fontWeight: ['regular', 'medium', 'semibold', 'bold'],
     longLine: ['ellipsis', 'scroll'], idleBehavior: ['title', 'hold', 'hide'], pauseBehavior: ['keep', 'dim', 'hide'],

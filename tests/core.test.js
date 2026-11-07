@@ -24,6 +24,7 @@ test('display selection and desktop selection remain independent', () => {
   assert.equal(sanitizeConfig({ screenMode: 'all', spaceMode: 'current' }).spaceMode, 'current');
   assert.equal(sanitizeConfig({ spaceMode: 'invalid' }).spaceMode, 'all');
   assert.equal(sanitizeConfig({ placement: 'left' }).placement, 'right');
+  assert.equal(sanitizeConfig({ screenMode: 'active' }).screenMode, 'primary');
 });
 test('color mode migrates old settings without losing custom colors', () => {
   assert.equal(sanitizeConfig({ automaticColor: false, originalColor: '#123456' }).colorMode, 'custom');
