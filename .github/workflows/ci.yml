@@ -23,3 +23,5 @@ jobs:
         run: node scripts/build.mjs --universal
       - name: Validate rebuilt distribution
         run: npm run package
+      - name: Verify rebuilt package matches Git
+        run: npm run check:generated

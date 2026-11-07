@@ -71,6 +71,7 @@ npm test
 node scripts/build.mjs --universal
 npm run package
 npm run verify:package
+npm run check:generated
 ```
 
 - `plugin/src/`、`plugin/ui/`：播放器桥接、歌词逻辑及共用设置页。
@@ -80,6 +81,7 @@ npm run verify:package
 - `scripts/`：构建、分发准备、包校验及本地安装；`tests/`：自动检查。
 
 修改源码后运行上述完整命令，提交更新后的源码和 `packages/echo-menu-lyrics/`。
+CI 会重新构建并执行 `check:generated`，确认仓库内安装包与源码产物完全一致。
 版本以 `plugin/manifest.json` 和 `package.json` 为准，两者须同步。
 `echo-plugins.json` 仅记录仓库及安装目录，不单独维护版本号。
 

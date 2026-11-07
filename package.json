@@ -11,6 +11,7 @@
     "package": "node scripts/package.mjs",
     "install:local": "node scripts/install.mjs",
     "prepare:publish": "node scripts/prepare-publish.mjs",
+    "check:generated": "node scripts/check-generated.mjs",
     "verify:package": "node scripts/check-package.mjs"
   },
   "engines": { "node": ">=20" }
