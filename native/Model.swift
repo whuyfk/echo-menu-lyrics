@@ -100,6 +100,9 @@ func compactControlFrames(in bounds: NSRect) -> [NSRect] {
     let x = bounds.midX - width / 2
     return (0..<5).map { NSRect(x: x + CGFloat($0) * width / 5, y: bounds.minY, width: width / 5, height: bounds.height) }
 }
+func compactControlIndex(in bounds: NSRect, at point: NSPoint) -> Int? {
+    compactControlFrames(in: bounds).firstIndex(where: { $0.contains(point) })
+}
 
 let playbackCommands = ["togglePlayMode", "previousTrack", "togglePlayback", "nextTrack", "toggleFavorite"]
 func playModeSymbol(_ mode: String) -> String {

@@ -4,6 +4,9 @@ import CoreText
 private final class PlaybackButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {} // Symbols are drawn by LyricView using these same frames.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    // The status-item window can end a child button's tracking cycle before mouseUp.
+    // Route physical clicks through LyricView, while keeping these buttons in the AX tree.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 final class LyricView: NSView {
@@ -60,7 +63,7 @@ final class LyricView: NSView {
         if compact { controller?.showContextMenu(event: event, view: self); return }
         guard state.hasTrack else { return }
         let point = convert(event.locationInWindow, from: nil)
-        guard let index = compactControlFrames(in: bounds).firstIndex(where: { $0.contains(point) }) else { return }
+        guard let index = compactControlIndex(in: bounds, at: point) else { return }
         controller?.command(playbackCommands[index])
     }
     override func rightMouseDown(with event: NSEvent) { controller?.showContextMenu(event: event, view: self) }
