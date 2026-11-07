@@ -117,9 +117,9 @@ export function createSession(ctx) {
       } else if (message.type === 'metadata' && nativeClients.has(socket)) {
         metadata = message.metadata; broadcast({ type: 'metadata', metadata });
       } else if (message.type === 'nativeAction') {
-        if (!['openAccessibility', 'showSettings', 'restart'].includes(message.action)) throw new Error('未知界面操作');
+        if (!['showSettings', 'restart'].includes(message.action)) throw new Error('未知界面操作');
         if (message.action === 'restart') await launch();
-        else if (!nativeClients.size) { if (message.action === 'showSettings') await launch(true); else throw new Error('菜单栏组件尚未连接'); }
+        else if (!nativeClients.size) await launch(true);
         else nativeClients.forEach(client => void send(client, { type: 'nativeAction', action: message.action }));
       } else if (message.type === 'preview') {
         const result = await session.preview((message.patterns || []).join('\n'));

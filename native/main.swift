@@ -1,43 +1,27 @@
 import AppKit
-import ApplicationServices
 import CoreText
 
 func diagnostics() {
     let screens = NSScreen.screens.map { screen -> [String: Any] in
         ["id": screen.stableID, "name": screen.localizedName, "frame": NSStringFromRect(screen.frame),
-         "visibleFrame": NSStringFromRect(screen.visibleFrame), "topLeft": NSStringFromRect(screen.topLeftRegion),
-         "topRight": NSStringFromRect(screen.topRightRegion), "scale": screen.backingScaleFactor,
+         "visibleFrame": NSStringFromRect(screen.visibleFrame), "topRight": NSStringFromRect(screen.topRightRegion),
+         "scale": screen.backingScaleFactor,
          "safeTop": screen.safeAreaInsets.top]
     }
-    let geometry = MenuGeometry.read()
     let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
     let topWindows = windows.compactMap { value -> [String: Any]? in
         guard let bounds = value[kCGWindowBounds as String] as? [String: Any], let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary), rect.minY < 80, rect.height < 100 else { return nil }
-        return ["layer": value[kCGWindowLayer as String] ?? -1, "bounds": NSStringFromRect(rect)]
+        return ["ownerPID": value[kCGWindowOwnerPID as String] ?? -1, "layer": value[kCGWindowLayer as String] ?? -1, "bounds": NSStringFromRect(rect)]
     }
-    let data: [String: Any] = ["os": ProcessInfo.processInfo.operatingSystemVersionString, "accessibilityTrusted": AXIsProcessTrusted(),
-                               "screens": screens, "menuFrames": geometry.menuFrames.map(NSStringFromRect), "extraFrames": geometry.extraFrames.map(NSStringFromRect), "topWindows": topWindows]
+    let data: [String: Any] = ["os": ProcessInfo.processInfo.operatingSystemVersionString, "screens": screens,
+                               "processPID": ProcessInfo.processInfo.processIdentifier, "topWindows": topWindows]
     if let json = try? JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys]) { print(String(decoding: json, as: UTF8.self)) }
 }
 func selfTest() {
     _ = NSApplication.shared
-    let region = NSRect(x: 0, y: 850, width: 700, height: 32)
-    let left = lyricFrame(region: region, menuEnd: 400, rightBoundary: 700, preferredWidth: 280, height: 32, alignRight: false)
-    precondition(left?.minX == 410 && left?.maxX == 690)
-    precondition(lyricFrame(region: region, menuEnd: 600, rightBoundary: 700, preferredWidth: 280, height: 32, alignRight: false) == nil)
-    let right = lyricFrame(region: NSRect(x: 850, y: 850, width: 700, height: 32), menuEnd: 400,
-                           rightBoundary: 1200, preferredWidth: 280, height: 32, alignRight: true)
-    precondition(right?.maxX == 1192 && right!.minX >= 858)
-    let offlineGeometry = MenuGeometry.read(
-        MenuGeometryInput(trusted: false, ownerPID: 0, referenceTop: 0, screenFrames: [], runningPIDs: []),
-        includeExtras: true,
-        previousExtras: [])
-    precondition(!offlineGeometry.trusted && offlineGeometry.menuFrames.isEmpty && offlineGeometry.extraFrames.isEmpty)
     let config = LyricsConfig.from(["displayMode": "bilingual", "maxWidth": 320.0])
     precondition(config.displayMode == "bilingual" && config.maxWidth == 320 && config.enabled)
     precondition(LyricsConfig().spaceMode == "all")
-    precondition(!LyricsConfig().requiresMenuGeometry)
-    precondition(LyricsConfig.from(["spaceMode": "current"]).requiresMenuGeometry)
     let cells = compactControlFrames(in: NSRect(x: 0, y: 0, width: 500, height: 30))
     precondition(cells.count == 5 && cells[0].minX == 160 && cells[4].maxX == 340)
     let narrow = compactControlFrames(in: NSRect(x: 0, y: 0, width: 128, height: 24))
@@ -56,7 +40,6 @@ func selfTest() {
     precondition(playbackCommands.count == cells.count && playbackCommands.first == "togglePlayMode")
     precondition(contentWidth(textWidth: 35, maximum: 500) == 128)
     precondition(contentWidth(textWidth: 180, maximum: 500) == 196)
-    precondition(textBaseline(centerY: 15, ascent: 11, descent: 3) == 11)
     for text in ["改变自己 · 王力宏", "Can't stop you can't hold you", "Agjp", "天空の城"] {
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 14)]))
         let ink = textInkBounds(line)
@@ -66,12 +49,12 @@ func selfTest() {
     var bilingualState = LyricState(); bilingualState.primary = "Moonlight falls by your window"; bilingualState.secondary = "月光落在你经过的窗前"
     var bilingualConfig = LyricsConfig(); bilingualConfig.fontSize = 14
     bilingualView.update(state: bilingualState, config: bilingualConfig)
-    bilingualView.textLayoutHeight = sharedTextHeight(menuHeight: 30, buttonHeight: 22)
-    let leftSizes = bilingualView.sizes(for: 30), rightSizes = bilingualView.sizes(for: 22)
-    precondition(leftSizes.0 == rightSizes.0 && leftSizes.1 == rightSizes.1)
+    bilingualView.textLayoutHeight = 22
+    let menuSizes = bilingualView.sizes(for: 30), statusSizes = bilingualView.sizes(for: 22)
+    precondition(menuSizes.0 == statusSizes.0 && menuSizes.1 == statusSizes.1)
     precondition(bilingualView.preferredWidth(config: bilingualConfig, state: bilingualState, height: 30) == bilingualView.preferredWidth(config: bilingualConfig, state: bilingualState, height: 22))
-    print("PASS: bilingual 30pt / 22pt containers share \(leftSizes.0)pt fonts and matching measured widths")
-    bilingualView.textLayoutHeight = sharedTextHeight(menuHeight: 30, buttonHeight: 30)
+    print("PASS: bilingual 30pt / 22pt containers share \(menuSizes.0)pt fonts and matching measured widths")
+    bilingualView.textLayoutHeight = 30
     let largeSizes = bilingualView.sizes(for: 30)
     precondition(largeSizes.0 > 12 && largeSizes.0 <= bilingualConfig.fontSize)
     let reference = CTLineCreateWithAttributedString(NSAttributedString(string: "国Agjp", attributes: [.font: NSFont.systemFont(ofSize: largeSizes.0)]))
@@ -93,15 +76,10 @@ func selfTest() {
     controlsView.update(state: controlsState, config: LyricsConfig())
     precondition(controlsView.visiblePlaybackCommands.isEmpty)
     print("PASS: hover controls only expose five actions when visible, expanded and playable")
-    var stability = MenuStability(); let now = Date()
-    precondition(!stability.accepts("app1:500", at: now))
-    precondition(stability.accepts("app1:500", at: now.addingTimeInterval(0.04)))
-    precondition(!stability.accepts("app2:700", at: now.addingTimeInterval(0.05)))
-    stability.reset(); precondition(!stability.accepts("app2:700", at: now.addingTimeInterval(0.1)))
     let timing = PaintTiming(timelineMs: 1500, sampledAt: 1000, startMs: 1000, endMs: 3000, advancing: false, rate: 1, advanceLimitMs: 1800, primary: [], secondary: [])
     precondition(timing.progress(at: 1000) == 0 && timing.progress(at: 2000) == 0.5 && timing.progress(at: 3000) == 1)
     precondition(timing.now(Date(timeIntervalSince1970: 10)) == 1500)
-    print("PASS: safe geometry, compact control width, content fitting, baseline, menu transition invalidation, progressive timing, config defaults")
+    print("PASS: status-item controls, content fitting, panel behavior, progressive timing, and config defaults")
 }
 
 func renderChecks(_ directory: String) {
@@ -124,21 +102,21 @@ func renderChecks(_ directory: String) {
         ("alignment-cjk", "改变自己 · 王力宏", "", 4000, false, 180),
         ("alignment-latin", "Can't stop you can't hold you", "", 4000, false, 230),
         ("alignment-bilingual", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
-        ("bilingual-left-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
-        ("bilingual-right-22", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
-        ("bilingual-large-left-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
-        ("bilingual-large-right-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
+        ("bilingual-panel-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
+        ("bilingual-status-22", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
+        ("bilingual-large-panel-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
+        ("bilingual-large-status-30", "Moonlight falls by your window", "月光落在你经过的窗前", 4000, false, 230),
     ]
     for (name, primary, secondary, progress, hover, width) in cases {
-        let height: CGFloat = name == "bilingual-right-22" ? 22 : 30
+        let height: CGFloat = name == "bilingual-status-22" ? 22 : 30
         let view = LyricView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        if name == "bilingual-left-30" || name == "bilingual-right-22" { view.textLayoutHeight = 22 }
+        if name == "bilingual-panel-30" || name == "bilingual-status-22" { view.textLayoutHeight = 22 }
         if name.hasPrefix("bilingual-large-") { view.textLayoutHeight = 30 }
         var state = LyricState(); state.primary = primary; state.secondary = secondary; state.reason = "lyric"; state.hasTrack = true; state.isPlaying = true
         if name.hasPrefix("hover-mode-") { state.playMode = String(name.dropFirst("hover-mode-".count)); state.isFavorite = true }
         state.timing = PaintTiming(timelineMs: progress, sampledAt: 0, startMs: 0, endMs: 4000, advancing: false, rate: 1, advanceLimitMs: 0, primary: [], secondary: [])
         var localConfig = config
-        if name.hasPrefix("alignment-") || name.hasPrefix("bilingual-left") || name.hasPrefix("bilingual-right") || name.hasPrefix("bilingual-large-") { localConfig.fontSize = 14 }
+        if name.hasPrefix("alignment-") || name.hasPrefix("bilingual-panel") || name.hasPrefix("bilingual-status") || name.hasPrefix("bilingual-large-") { localConfig.fontSize = 14 }
         if name.hasPrefix("cover-") { localConfig.colorMode = "cover" }
         if name == "cover-color" { state.coverColor = "#4C8DB2" }
         view.update(state: state, config: localConfig); view.hovered = hover

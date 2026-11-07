@@ -1,5 +1,4 @@
 import AppKit
-import ApplicationServices
 
 final class LyricPanel: NSPanel {
     override var canBecomeKey: Bool { false }
@@ -13,280 +12,173 @@ final class LyricPanel: NSPanel {
     }
 }
 
-struct MenuGeometry {
-    var menuFrames: [NSRect] = []
-    var extraFrames: [NSRect] = []
-    var trusted = false
-    var ownerPID: pid_t = 0
-    var signature: String { "\(ownerPID)|" + (menuFrames + extraFrames).map(NSStringFromRect).joined(separator: "|") }
-    static func read(includeExtras: Bool = true, previousExtras: [NSRect] = []) -> MenuGeometry {
-        let input = MenuGeometryInput.capture(includeExtras: includeExtras)
-        return read(input, includeExtras: includeExtras, previousExtras: previousExtras)
-    }
-    static func read(_ input: MenuGeometryInput, includeExtras: Bool, previousExtras: [NSRect]) -> MenuGeometry {
-        var result = MenuGeometry(); result.trusted = input.trusted; result.ownerPID = input.ownerPID
-        guard input.trusted, input.ownerPID != 0 else { return result }
-        result.extraFrames = previousExtras
-        func attribute(_ element: AXUIElement, _ name: CFString) -> CFTypeRef? {
-            var value: CFTypeRef?; return AXUIElementCopyAttributeValue(element, name, &value) == .success ? value : nil
-        }
-        func frame(_ element: AXUIElement) -> NSRect? {
-            guard let p = attribute(element, kAXPositionAttribute as CFString), let s = attribute(element, kAXSizeAttribute as CFString),
-                  CFGetTypeID(p) == AXValueGetTypeID(), CFGetTypeID(s) == AXValueGetTypeID() else { return nil }
-            var point = CGPoint.zero, size = CGSize.zero
-            guard AXValueGetValue(p as! AXValue, .cgPoint, &point), AXValueGetValue(s as! AXValue, .cgSize, &size), size.width > 0 else { return nil }
-            return NSRect(x: point.x, y: input.referenceTop - point.y - size.height, width: size.width, height: size.height)
-        }
-        let app = AXUIElementCreateApplication(input.ownerPID); AXUIElementSetMessagingTimeout(app, 0.035)
-        if let value = attribute(app, kAXMenuBarAttribute as CFString), CFGetTypeID(value) == AXUIElementGetTypeID(),
-           let children = attribute(value as! AXUIElement, kAXChildrenAttribute as CFString) as? [AXUIElement] {
-            result.menuFrames = children.compactMap(frame)
-        }
-        if includeExtras {
-            result.extraFrames = []
-            // macOS 27 hosts menu extras in MenuBarAgent rather than separate status windows.
-            // Read only the public AXExtrasMenuBar positions, including third-party status items.
-            for pid in input.runningPIDs {
-                let element = AXUIElementCreateApplication(pid)
-                AXUIElementSetMessagingTimeout(element, 0.04)
-                if let bar = attribute(element, "AXExtrasMenuBar" as CFString), CFGetTypeID(bar) == AXUIElementGetTypeID(),
-                   let children = attribute(bar as! AXUIElement, kAXChildrenAttribute as CFString) as? [AXUIElement] {
-                    result.extraFrames += children.compactMap(frame).filter { rect in
-                        rect.height >= 16 && rect.width > 0 && input.screenFrames.contains { frame in
-                            abs(rect.maxY - frame.maxY) < 6 && frame.contains(NSPoint(x: rect.midX, y: rect.midY))
-                        }
-                    }
-                }
-            }
-        }
-        // Public window geometry provides status-item bounds even when AXExtrasMenuBar is unavailable.
-        // No window titles or pixels are read. Full-width menu backgrounds are excluded.
-        let windows = includeExtras ? (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []) : []
-        for info in windows where includeExtras {
-            guard let layer = info[kCGWindowLayer as String] as? Int, layer == Int(CGWindowLevelForKey(.statusWindow)),
-                  let dictionary = info[kCGWindowBounds as String] as? [String: Any],
-                  let raw = CGRect(dictionaryRepresentation: dictionary as CFDictionary), raw.width > 0, raw.height >= 16, raw.height <= 60 else { continue }
-            let rect = NSRect(x: raw.minX, y: input.referenceTop - raw.maxY, width: raw.width, height: raw.height)
-            if input.screenFrames.contains(where: { abs(rect.maxY - $0.maxY) < 6 && rect.width < $0.width / 2 && $0.contains(NSPoint(x: rect.midX, y: rect.midY)) }) {
-                result.extraFrames.append(rect)
-            }
-        }
-        var seen: Set<String> = []
-        result.extraFrames = result.extraFrames.filter { seen.insert(NSStringFromRect($0)).inserted }.sorted { $0.minX < $1.minX }
-        return result
-    }
-    func menuBand(on screen: NSScreen) -> NSRect? {
-        let values = menuFrames.filter { $0.midX >= screen.frame.minX && $0.midX <= screen.frame.maxX && abs($0.maxY - screen.frame.maxY) < 6 }
-        guard let first = values.first else { return nil }; return values.dropFirst().reduce(first) { $0.union($1) }
-    }
-    func menuEnd(on screen: NSScreen) -> CGFloat? { menuBand(on: screen)?.maxX }
-    func extrasStart(on screen: NSScreen) -> CGFloat? {
-        extraFrames.filter { $0.midX >= screen.frame.minX && $0.midX <= screen.frame.maxX && abs($0.maxY - screen.frame.maxY) < 6 }.map(\.minX).min()
-    }
-}
-
-struct MenuGeometryInput {
-    let trusted: Bool
-    let ownerPID: pid_t
-    let referenceTop: CGFloat
-    let screenFrames: [NSRect]
-    let runningPIDs: [pid_t]
-    static func capture(includeExtras: Bool) -> MenuGeometryInput {
-        let trusted = AXIsProcessTrusted()
-        let ownerPID = trusted ? (NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0) : 0
-        let screens = NSScreen.screens
-        return MenuGeometryInput(trusted: trusted, ownerPID: ownerPID,
-                                 referenceTop: screens.first?.frame.maxY ?? 0,
-                                 screenFrames: screens.map(\.frame),
-                                 runningPIDs: includeExtras ? NSWorkspace.shared.runningApplications.map(\.processIdentifier) : [])
-    }
-}
-
-// A geometry sample must be confirmed twice for the same foreground app before a panel is shown.
-struct MenuStability {
-    var signature = ""
-    var firstSeen = Date.distantPast
-    mutating func reset() { signature = ""; firstSeen = .distantPast }
-    mutating func accepts(_ sample: String, at now: Date) -> Bool {
-        if signature != sample { signature = sample; firstSeen = now; return false }
-        return now.timeIntervalSince(firstSeen) >= 0.035
-    }
-}
-
 final class LayoutCoordinator {
     weak var controller: MenuController?
     private var panels: [String: LyricPanel] = [:]
     private var timer: Timer?
-    private var cachedGeometry = MenuGeometry()
-    private var stability = MenuStability()
-    private var observer: AXObserver?
-    private var observedPID: pid_t = 0
-    private var deferred: [DispatchWorkItem] = []
-    private var lastExtras = Date.distantPast
-    private var extraFrames: [NSRect] = []
-    private let geometryQueue = DispatchQueue(label: "cc.echo.menu-lyrics.geometry", qos: .userInitiated)
-    private var geometryInFlight = false
-    private var geometryPending = false
-    private var geometryGeneration = 0
-    private var stopped = false
     private var panelSpaceMode = ""
-    private let menuPollInterval: TimeInterval = 0.75
-    private let extrasPollInterval: TimeInterval = 4
+    private var pendingUpdate: DispatchWorkItem?
+    private var cachedStatusFrames: [NSRect] = []
+    private var stopped = false
+
     init(controller: MenuController) { self.controller = controller }
+
     func start() {
-        let timer = Timer(timeInterval: menuPollInterval, repeats: true) { [weak self] _ in self?.refreshMenus() }
-        self.timer = timer; RunLoop.main.add(timer, forMode: .common)
+        let timer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+            guard let self, !self.stopped, self.usesPanels else { return }
+            self.refreshStatusFrames(); self.update()
+        }
+        self.timer = timer
+        RunLoop.main.add(timer, forMode: .common)
         invalidateMenus()
     }
-    private func observeForeground() {
-        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
-        guard pid != observedPID else { return }
-        if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes) }
-        observer = nil; observedPID = pid
-        guard pid != 0, AXIsProcessTrusted() else { return }
-        var created: AXObserver?
-        let callback: AXObserverCallback = { _, _, _, context in
-            guard let context else { return }
-            Unmanaged<LayoutCoordinator>.fromOpaque(context).takeUnretainedValue().invalidateMenus()
-        }
-        guard AXObserverCreate(pid, callback, &created) == .success, let created else { return }
-        let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, 0.035)
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        for name in [kAXFocusedWindowChangedNotification, kAXMainWindowChangedNotification] {
-            _ = AXObserverAddNotification(created, app, name as CFString, context)
-        }
-        var menu: CFTypeRef?
-        if AXUIElementCopyAttributeValue(app, kAXMenuBarAttribute as CFString, &menu) == .success,
-           let menu, CFGetTypeID(menu) == AXUIElementGetTypeID() {
-            for name in ["AXLayoutChanged", "AXChildrenChanged", "AXValueChanged"] { _ = AXObserverAddNotification(created, menu as! AXUIElement, name as CFString, context) }
-        }
-        observer = created; CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(created), .commonModes)
-    }
+
     func invalidateMenus() {
-        geometryGeneration += 1
-        geometryPending = true
+        pendingUpdate?.cancel()
         panels.values.forEach { $0.orderOut(nil) }
-        cachedGeometry = MenuGeometry(); stability.reset()
-        deferred.forEach { $0.cancel() }; deferred.removeAll()
-        observeForeground(); update()
-        requestGeometry()
-        for delay in [0.02, 0.075, 0.15, 0.3, 0.6] {
-            let work = DispatchWorkItem { [weak self] in self?.refreshMenus() }
-            deferred.append(work); DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
-        }
+        refreshStatusFrames()
+        update(force: true)
+        scheduleUpdate()
     }
-    private func refreshMenus() {
-        guard let controller else { return }
-        guard controller.config.placement == "left" || controller.config.screenMode != "primary" || controller.config.spaceMode == "current" || !controller.state.secondary.isEmpty else { update(); return }
-        if observedPID != (NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0) { invalidateMenus(); return }
-        requestGeometry()
+
+    private var usesPanels: Bool {
+        guard let controller else { return false }
+        let config = controller.config, state = controller.state
+        return config.enabled && !state.hidden &&
+            (config.screenMode != "primary" || config.spaceMode == "current" || (config.displayMode == "bilingual" && !state.secondary.isEmpty))
     }
-    private func requestGeometry() {
-        guard let controller else { return }
-        let needsGeometry = controller.config.placement == "left" || controller.config.screenMode != "primary" || controller.config.spaceMode == "current" || !controller.state.secondary.isEmpty
-        guard needsGeometry, AXIsProcessTrusted() else {
-            cachedGeometry = MenuGeometry(); panels.values.forEach { $0.orderOut(nil) }; update(); return
+
+    private func targetScreens(config: LyricsConfig) -> [NSScreen] {
+        let primary = NSScreen.screens.first
+        if config.screenMode == "all" { return NSScreen.screens }
+        if config.screenMode == "active" {
+            return [NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? primary].compactMap { $0 }
         }
-        if geometryInFlight { geometryPending = true; return }
-        geometryInFlight = true; geometryPending = false
-        let generation = geometryGeneration
-        let includeExtras = Date().timeIntervalSince(lastExtras) >= extrasPollInterval
-        let input = MenuGeometryInput.capture(includeExtras: includeExtras)
-        let previousExtras = extraFrames
-        geometryQueue.async { [weak self] in
-            let sample = MenuGeometry.read(input, includeExtras: includeExtras, previousExtras: previousExtras)
-            DispatchQueue.main.async {
-                guard let self, !self.stopped else { return }
-                self.geometryInFlight = false
-                let currentPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
-                let stale = generation != self.geometryGeneration || sample.ownerPID != currentPID
-                if !stale {
-                    if includeExtras { self.lastExtras = Date(); self.extraFrames = sample.extraFrames }
-                    if self.stability.accepts(sample.signature, at: Date()) { self.cachedGeometry = sample }
-                    else { self.cachedGeometry = MenuGeometry(); self.panels.values.forEach { $0.orderOut(nil) } }
-                    self.update()
-                } else {
-                    self.geometryPending = true
-                }
-                if self.geometryPending { self.geometryPending = false; self.refreshMenus() }
-            }
-        }
+        return [primary].compactMap { $0 }
     }
+
+    private func refreshStatusFrames() {
+        guard let controller else { cachedStatusFrames = []; return }
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let referenceTop = NSScreen.screens.first?.frame.maxY ?? 0
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        var frames: [NSRect] = []
+        for info in windows {
+            guard let pid = info[kCGWindowOwnerPID as String] as? NSNumber, pid.int32Value == ownPID,
+                  let layer = info[kCGWindowLayer as String] as? Int,
+                  layer == Int(CGWindowLevelForKey(.statusWindow)),
+                  let dictionary = info[kCGWindowBounds as String] as? [String: Any],
+                  let raw = CGRect(dictionaryRepresentation: dictionary as CFDictionary),
+                  raw.width > 0, raw.height >= 16, raw.height <= 60 else { continue }
+            frames.append(NSRect(x: raw.minX, y: referenceTop - raw.maxY, width: raw.width, height: raw.height))
+        }
+        if let button = controller.statusItem.button, let window = button.window {
+            frames.append(window.convertToScreen(button.convert(button.bounds, to: nil)))
+        }
+        var seen: Set<String> = []
+        cachedStatusFrames = frames.filter { seen.insert(NSStringFromRect($0)).inserted }.sorted { $0.minX < $1.minX }
+    }
+
+    private func anchor(on screen: NSScreen, reservedWidth: CGFloat) -> NSRect? {
+        if let frame = cachedStatusFrames.first(where: {
+            $0.midX >= screen.frame.minX && $0.midX <= screen.frame.maxX && abs($0.maxY - screen.frame.maxY) < 8
+        }) { return frame }
+        let primary = NSScreen.screens.first ?? screen
+        if let primaryFrame = cachedStatusFrames.first(where: {
+            $0.midX >= primary.frame.minX && $0.midX <= primary.frame.maxX && abs($0.maxY - primary.frame.maxY) < 8
+        }) {
+            let rightGap = max(0, primary.frame.maxX - primaryFrame.maxX)
+            return NSRect(x: screen.frame.maxX - rightGap - reservedWidth, y: screen.frame.maxY - primaryFrame.height,
+                          width: reservedWidth, height: primaryFrame.height)
+        }
+        return nil
+    }
+
+    private func scheduleUpdate() {
+        pendingUpdate?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.stopped else { return }
+            self.refreshStatusFrames(); self.update()
+        }
+        pendingUpdate = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+    }
+
     func update(force: Bool = false) {
         guard let controller else { return }
         let config = controller.config, state = controller.state
-        let usePanels = config.placement == "left" || config.screenMode != "primary" || config.spaceMode == "current" || !state.secondary.isEmpty
+        let usePanels = usesPanels
         if panelSpaceMode != config.spaceMode {
             panels.values.forEach { $0.close() }; panels.removeAll(); panelSpaceMode = config.spaceMode
         }
-        let primary = NSScreen.screens.first
-        var targets = [primary].compactMap { $0 }
-        if config.screenMode == "all" { targets = NSScreen.screens }
-        else if config.screenMode == "active" { targets = [NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? primary].compactMap { $0 } }
-        var used: Set<String> = [], note = ""
-        let trusted = AXIsProcessTrusted()
-        if usePanels && !trusted { note = "当前布局需要辅助功能权限读取菜单边界；请从 EchoMusic 插件管理打开设置。" }
-        if cachedGeometry.ownerPID != (NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0) { panels.values.forEach { $0.orderOut(nil) } }
-        else if usePanels && trusted && config.enabled && !state.hidden {
+        let targets = targetScreens(config: config)
+        if usePanels {
+            let widths = targets.map { screen in
+                controller.statusView.preferredWidth(config: config.on(screen), state: state,
+                                                     height: screen.menuRowHeight)
+            }
+            let reservedWidth = max(128, widths.max() ?? 128)
+            controller.statusItem.isVisible = config.enabled && !state.hidden
+            if abs(controller.statusItem.length - reservedWidth) > 0.5 {
+                controller.statusItem.length = reservedWidth
+                scheduleUpdate()
+            }
+            if let button = controller.statusItem.button {
+                controller.statusView.frame = button.bounds
+                controller.statusView.update(state: state, config: config, compact: true)
+            }
+            var used: Set<String> = [], note = ""
             for screen in targets {
-                let local = config.on(screen), isLeft = config.placement == "left"
-                guard let band = cachedGeometry.menuBand(on: screen) else { note = "菜单边界正在重新确认，歌词暂时收起。"; continue }
-                var region = isLeft ? screen.topLeftRegion : screen.topRightRegion
-                region.origin.y = band.minY; region.size.height = band.height
-                let extras = cachedGeometry.extrasStart(on: screen)
-                // On an unnotched display no overlay is drawn unless the status-item boundary is known.
-                guard let boundary = extras ?? (screen.safeAreaInsets.top > 0 && isLeft ? region.maxX : nil) else {
-                    note = "暂时无法确认状态图标边界，歌词已收起。"; continue
+                let local = config.on(screen)
+                guard let anchor = anchor(on: screen, reservedWidth: controller.statusItem.length) else {
+                    note = "正在为歌词预留状态栏空间…"; continue
                 }
+                let height = max(anchor.height, screen.menuRowHeight)
+                let frame = NSRect(x: anchor.minX, y: screen.frame.maxY - height,
+                                   width: max(128, anchor.width), height: height)
                 let key = screen.stableID
                 let view = (panels[key]?.contentView as? LyricView) ?? LyricView(frame: .zero)
                 view.controller = controller
-                // Bilingual lyrics use the full menu row on either side, so
-                // the smaller status-button content rect cannot shrink them.
-                view.textLayoutHeight = band.height
-                let preferred = view.hovered && view.bounds.width >= 128 ? view.bounds.width : view.preferredWidth(config: local, state: state, height: band.height)
-                guard let frame = lyricFrame(region: region, menuEnd: band.maxX, rightBoundary: boundary, preferredWidth: preferred, height: band.height, alignRight: !isLeft) else {
-                    note = "菜单栏可用空间不足，歌词已收起。"; continue
-                }
+                view.textLayoutHeight = height
+                view.frame = NSRect(origin: .zero, size: frame.size)
+                view.update(state: state, config: local)
                 let panel: LyricPanel
                 if let existing = panels[key] { panel = existing }
                 else { panel = LyricPanel(frame: frame, view: view, spaceMode: config.spaceMode); panels[key] = panel }
-                // Do not order a desktop-bound window into another Space when
-                // foreground-app notifications arrive after a desktop switch.
                 if config.spaceMode == "current" && !panel.isOnActiveSpace {
                     note = "歌词固定在另一个桌面；返回该桌面后恢复，重启组件可固定到当前桌面。"; continue
                 }
                 if panel.frame != frame { panel.setFrame(frame, display: false) }
-                view.frame = NSRect(origin: .zero, size: frame.size)
-                view.update(state: state, config: local)
                 panel.orderFrontRegardless(); used.insert(key)
             }
+            for (key, panel) in panels where !used.contains(key) { panel.orderOut(nil) }
+            controller.layoutNote = note
+            return
         }
-        for (key, panel) in panels where !used.contains(key) { panel.orderOut(nil) }
-        controller.layoutNote = note
-        let compact = usePanels || !config.enabled || state.hidden
-        controller.statusItem.isVisible = !compact
-        let screen = controller.statusItem.button?.window?.screen ?? primary
+
+        panels.values.forEach { $0.orderOut(nil) }
+        controller.statusItem.isVisible = config.enabled && !state.hidden
+        let screen = controller.statusItem.button?.window?.screen ?? NSScreen.screens.first
         let local = config.on(screen)
-        let barHeight = controller.statusItem.button?.bounds.height ?? NSStatusBar.system.thickness
-        controller.statusView.textLayoutHeight = sharedTextHeight(menuHeight: screen?.menuRowHeight ?? barHeight, buttonHeight: barHeight)
-        var width: CGFloat = compact ? 24 : controller.statusView.preferredWidth(config: local, state: state, height: barHeight)
-        if !compact && controller.statusView.hovered { width = controller.statusItem.length }
-        if !compact, let screen, let button = controller.statusItem.button, let window = button.window {
-            let frame = window.convertToScreen(button.convert(button.bounds, to: nil))
-            width = min(width, max(24, frame.maxX - screen.topRightRegion.minX - 8))
-            if width < 128 { width = 0 }
+        let height = controller.statusItem.button?.bounds.height ?? NSStatusBar.system.thickness
+        controller.statusView.textLayoutHeight = height
+        var width = controller.statusView.preferredWidth(config: local, state: state, height: height)
+        if controller.statusView.hovered { width = max(width, 180) }
+        if controller.statusItem.isVisible, width < 128 { width = 128 }
+        if abs(controller.statusItem.length - width) > 0.5 {
+            controller.statusItem.length = width
+            scheduleUpdate()
         }
-        if !compact { controller.statusItem.isVisible = width >= 128 }
-        if abs(controller.statusItem.length - width) > 0.5 { controller.statusItem.length = width }
-        if let button = controller.statusItem.button { controller.statusView.frame = button.bounds }
-        controller.statusView.update(state: state, config: local, compact: compact || width < 128)
+        if let button = controller.statusItem.button {
+            controller.statusView.frame = button.bounds
+            controller.statusView.update(state: state, config: local, compact: !controller.statusItem.isVisible)
+        }
+        controller.layoutNote = ""
     }
+
     func stop() {
-        stopped = true; geometryGeneration += 1; geometryPending = false
-        timer?.invalidate(); timer = nil; deferred.forEach { $0.cancel() }; deferred.removeAll()
-        if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes) }
-        observer = nil; panels.values.forEach { $0.close() }; panels.removeAll()
+        stopped = true; pendingUpdate?.cancel(); pendingUpdate = nil
+        timer?.invalidate(); timer = nil
+        panels.values.forEach { $0.close() }; panels.removeAll()
     }
 }

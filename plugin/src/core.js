@@ -38,9 +38,9 @@ export function sanitizeConfig(input = {}) {
     if (typeof input[key] === 'boolean') out[key] = input[key];
   const enums = {
     colorMode: ['system', 'cover', 'custom'],
-    placement: ['left', 'right'], screenMode: ['primary', 'active', 'all'],
+    placement: ['right'], screenMode: ['primary', 'active', 'all'],
     spaceMode: ['current', 'all'],
-    displayMode: ['original', 'translation', 'bilingual'], fontWeight: ['regular', 'medium', 'semibold', 'bold'],
+    displayMode: ['original', 'translation', 'bilingual', 'bilingualInline'], fontWeight: ['regular', 'medium', 'semibold', 'bold'],
     longLine: ['ellipsis', 'scroll'], idleBehavior: ['title', 'hold', 'hide'], pauseBehavior: ['keep', 'dim', 'hide'],
   };
   for (const [key, values] of Object.entries(enums)) if (values.includes(input[key])) out[key] = input[key];
@@ -135,13 +135,14 @@ export function lineTiming(snapshot, lines, index, config, now) {
   const endMs = lastCharacterEnd > line.startMs ? lastCharacterEnd : next?.startMs ?? Math.max(line.startMs + 1000, Number(p.duration || 0) * 1000);
   const sampleAt = Number(p.clock?.sampledAt ?? p.updatedAt ?? now);
   const originalFirst = config.displayMode !== 'translation' || !line.translation;
+  const inlineBilingual = config.displayMode === 'bilingualInline' && !!line.translation;
   return {
     timelineMs: estimatedPlaybackMs(p, now) + Number(snapshot.lyric?.timeOffset || 0) + config.offsetMs,
     sampledAt: now, startMs: line.startMs, endMs,
     advancing: !!(p.clock?.isPlaying ?? p.isPlaying) && (p.clock?.isAdvancing ?? true),
     rate: Math.max(.1, Number(p.clock?.playbackRate ?? p.playbackRate ?? 1) || 1),
     advanceLimitMs: Math.max(0, 1800 - Math.max(0, now - sampleAt)),
-    primary: originalFirst ? line.originalTiming : line.translationTiming,
+    primary: inlineBilingual ? [] : originalFirst ? line.originalTiming : line.translationTiming,
     secondary: config.displayMode === 'bilingual' ? line.translationTiming : [],
   };
 }
@@ -188,6 +189,7 @@ export function displayState(snapshot, lines, hidden, config, now = Date.now(), 
     base.original = line.original; base.translation = line.translation; base.reason = 'lyric';
     if (config.displayMode === 'translation') base.primary = line.translation || line.original;
     else if (config.displayMode === 'bilingual') { base.primary = line.original; base.secondary = line.translation; }
+    else if (config.displayMode === 'bilingualInline') base.primary = [line.original, line.translation].filter(Boolean).join('  ·  ');
     else base.primary = line.original;
     base.timing = lineTiming(snapshot, lines, index, config, now);
   } else {

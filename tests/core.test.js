@@ -23,6 +23,7 @@ test('display selection and desktop selection remain independent', () => {
   assert.equal(value.screenMode, 'primary'); assert.equal(value.spaceMode, 'all');
   assert.equal(sanitizeConfig({ screenMode: 'all', spaceMode: 'current' }).spaceMode, 'current');
   assert.equal(sanitizeConfig({ spaceMode: 'invalid' }).spaceMode, 'all');
+  assert.equal(sanitizeConfig({ placement: 'left' }).placement, 'right');
 });
 test('color mode migrates old settings without losing custom colors', () => {
   assert.equal(sanitizeConfig({ automaticColor: false, originalColor: '#123456' }).colorMode, 'custom');
@@ -136,6 +137,14 @@ test('translation fallback and bilingual display do not alter host settings', ()
   assert.equal(state.primary, 'A real lyric'); assert.equal(state.secondary, '真正的歌词');
   lines[2].translation = ''; assert.equal(displayState(p, lines, hidden, config, 1000).primary, 'A real lyric');
   assert.equal(p.lyric.wantTranslation, undefined);
+});
+test('inline bilingual mode stays on one native text line', () => {
+  const lines = normalizeLines(snapshot), hidden = [false, false, false];
+  const p = { ...snapshot, playback: { ...snapshot.playback, isPlaying: false, currentTime: 5 } };
+  const state = displayState(p, lines, hidden, { ...config, displayMode: 'bilingualInline' }, 1000);
+  assert.equal(state.primary, 'A real lyric  ·  真正的歌词');
+  assert.equal(state.secondary, '');
+  assert.deepEqual(state.timing.primary, []);
 });
 test('offset layers once, pause timeout works, previous track is never held', () => {
   const lines = normalizeLines(snapshot);

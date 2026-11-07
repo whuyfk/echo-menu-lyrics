@@ -1,6 +1,5 @@
 import AppKit
 import WebKit
-import ApplicationServices
 
 final class MenuController: NSObject {
     var config = LyricsConfig()
@@ -65,18 +64,9 @@ final class MenuController: NSObject {
         guard let type = message["type"] as? String else { return }
         if type == "nativeAction" {
             if message["action"] as? String == "showSettings" { showSettings() }
-            else if message["action"] as? String == "openAccessibility" { openAccessibility() }
         } else if type == "config", let values = message["config"] as? [String: Any] {
             config = LyricsConfig.from(values); layout.update(force: true)
-            let status: String
-            if !config.requiresMenuGeometry {
-                status = "菜单栏组件已连接；当前右侧单行模式无需辅助功能权限。"
-            } else if AXIsProcessTrusted() {
-                status = "菜单栏组件已连接"
-            } else {
-                status = "菜单栏组件已连接；当前选择的布局需要辅助功能权限，可在插件设置中打开系统授权。"
-            }
-            bridge?.send(["type": "nativeStatus", "text": status])
+            bridge?.send(["type": "nativeStatus", "text": "菜单栏组件已连接；歌词使用状态栏自身预留空间。"])
         } else if type == "state", let values = message["state"] as? [String: Any],
                   let data = try? JSONSerialization.data(withJSONObject: values), let value = try? JSONDecoder().decode(LyricState.self, from: data) {
             state = value; layout.update()
@@ -89,6 +79,7 @@ final class MenuController: NSObject {
             config = LyricsConfig.from(values, base: config)
             if config.displayMode == "original" { state.primary = state.original; state.secondary = "" }
             else if config.displayMode == "bilingual" { state.primary = state.original; state.secondary = state.translation }
+            else if config.displayMode == "bilingualInline" { state.primary = [state.original, state.translation].filter { !$0.isEmpty }.joined(separator: "  ·  "); state.secondary = "" }
             else { state.primary = state.translation; state.secondary = "" }
             layout.update(force: true)
         } else {
@@ -120,7 +111,7 @@ final class MenuController: NSObject {
             let item = NSMenuItem(title: text, action: nil, keyEquivalent: ""); item.isEnabled = false; menu.addItem(item)
         }
         if !state.original.isEmpty { menu.addItem(.separator()) }
-        for (mode, title) in [("original", "显示原文"), ("translation", "译文优先"), ("bilingual", "双语双行")] {
+        for (mode, title) in [("original", "显示原文"), ("translation", "译文优先"), ("bilingualInline", "双语单行"), ("bilingual", "双语双行")] {
             let item = NSMenuItem(title: title, action: #selector(setMode(_:)), keyEquivalent: "")
             item.target = self; item.representedObject = mode; item.state = config.displayMode == mode ? .on : .off; menu.addItem(item)
         }
@@ -146,11 +137,6 @@ final class MenuController: NSObject {
             window.isReleasedWhenClosed = false; window.center(); settingsWindow = window
         }
         NSApp.activate(ignoringOtherApps: true); settingsWindow?.makeKeyAndOrderFront(nil)
-    }
-    func openAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) }
     }
     private func startDemo() {
         connectionText = "演示模式 · 使用示例歌词，不控制实际播放器"

@@ -37,7 +37,7 @@ const architectures = process.argv.includes('--universal') ? ['arm64', 'x86_64']
 for (const arch of architectures) {
   run('xcrun', ['swiftc', '-swift-version', '5', '-O', '-target', `${arch}-apple-macosx13.0`,
     '-module-cache-path', path.join(root, '.build/module-cache'), ...sources,
-    '-framework', 'AppKit', '-framework', 'WebKit', '-framework', 'CoreText', '-framework', 'ApplicationServices',
+    '-framework', 'AppKit', '-framework', 'WebKit', '-framework', 'CoreText',
     '-o', path.join(root, `.build/EchoMenuLyrics-${arch}`)]);
 }
 const executable = path.join(app, 'Contents/MacOS/EchoMenuLyrics');
@@ -53,7 +53,7 @@ await writeFile(path.join(app, 'Contents/Info.plist'), `<?xml version="1.0" enco
 <key>CFBundleExecutable</key><string>EchoMenuLyrics</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>${manifest.version}</string>
-<key>CFBundleVersion</key><string>8</string>
+<key>CFBundleVersion</key><string>9</string>
 <key>EchoMenuLyricsSourceDigest</key><string>${sourceDigest}</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>

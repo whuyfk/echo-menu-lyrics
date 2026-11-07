@@ -120,7 +120,7 @@ final class LyricView: NSView {
     private func width(_ line: CTLine) -> CGFloat { CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil)) }
     func sizes(for height: CGFloat) -> (CGFloat, CGFloat) {
         if state.secondary.isEmpty { return (min(config.fontSize, height - 6), 0) }
-        // Both placements receive the same measured height from the coordinator.
+        // Both status-item and panel layouts receive the same measured text height.
         let textHeight = min(height, textLayoutHeight ?? height)
         var size = config.fontSize
         // A fixed mixed-script sample includes CJK fallback glyphs and Latin

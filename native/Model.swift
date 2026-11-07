@@ -51,9 +51,6 @@ struct LyricsConfig: Codable, Equatable {
         result.fontSize = override.fontSize ?? fontSize
         return result
     }
-    var requiresMenuGeometry: Bool {
-        placement == "left" || screenMode != "primary" || spaceMode == "current" || displayMode == "bilingual"
-    }
 }
 
 struct LyricState: Codable, Equatable {
@@ -120,7 +117,6 @@ func playModeTitle(_ mode: String) -> String {
 }
 
 func contentWidth(textWidth: CGFloat, maximum: CGFloat) -> CGFloat { min(maximum, max(128, ceil(textWidth) + 16)) }
-func textBaseline(centerY: CGFloat, ascent: CGFloat, descent: CGFloat) -> CGFloat { centerY - (ascent - descent) / 2 }
 
 func textInkBounds(_ line: CTLine) -> CGRect {
     let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
@@ -132,9 +128,6 @@ func opticalTextBaseline(centerY: CGFloat, ink: CGRect) -> CGFloat {
 }
 
 let bilingualLineGap: CGFloat = 0.5
-func sharedTextHeight(menuHeight: CGFloat, buttonHeight: CGFloat) -> CGFloat {
-    min(menuHeight, buttonHeight)
-}
 
 func lyricPanelBehavior(spaceMode: String) -> NSWindow.CollectionBehavior {
     spaceMode == "all" ? [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle] : [.stationary, .ignoresCycle, .fullScreenNone]
@@ -148,14 +141,12 @@ extension NSScreen {
     var stableID: String {
         String((deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0)
     }
-    var topLeftRegion: NSRect {
-        if #available(macOS 12, *), let region = auxiliaryTopLeftArea { return region }
-        return NSRect(x: frame.minX, y: frame.maxY - NSStatusBar.system.thickness,
-                      width: frame.width, height: NSStatusBar.system.thickness)
-    }
     var topRightRegion: NSRect {
         if #available(macOS 12, *), let region = auxiliaryTopRightArea { return region }
-        return topLeftRegion
+        return NSRect(x: frame.maxX - NSStatusBar.system.thickness,
+                      y: frame.maxY - NSStatusBar.system.thickness,
+                      width: NSStatusBar.system.thickness,
+                      height: NSStatusBar.system.thickness)
     }
 }
 
@@ -165,14 +156,4 @@ extension NSColor {
         self.init(srgbRed: Double((value >> 16) & 255) / 255, green: Double((value >> 8) & 255) / 255,
                   blue: Double(value & 255) / 255, alpha: 1)
     }
-}
-
-// Returns nil instead of drawing into occupied space. Also used by geometry self-tests.
-func lyricFrame(region: NSRect, menuEnd: CGFloat, rightBoundary: CGFloat, preferredWidth: CGFloat,
-                height: CGFloat, alignRight: Bool, minimumWidth: CGFloat = 128) -> NSRect? {
-    let start = max(region.minX + 8, menuEnd + 10)
-    let end = min(region.maxX - 8, rightBoundary - 8)
-    let width = min(preferredWidth, end - start)
-    guard width >= minimumWidth else { return nil }
-    return NSRect(x: alignRight ? end - width : start, y: region.maxY - height, width: width, height: height)
 }
