@@ -14,27 +14,15 @@ const snapshot = {
 
 test('invalid persisted configuration is normalized, not blindly trusted', () => {
   assert.equal(sanitizeConfig(null).displayMode, 'translation');
-  const value = sanitizeConfig({ maxWidth: 9999, fontSize: NaN, placement: 'center', opacity: 0, originalColor: 'red', customFilters: [null, '', '^Bass:'] });
+  const value = sanitizeConfig({ maxWidth: 9999, fontSize: NaN, futureOption: true, opacity: 0, originalColor: 'red', customFilters: [null, '', '^Bass:'] });
   assert.equal(value.maxWidth, 800); assert.equal(value.fontSize, 13);
-  assert.equal(Object.hasOwn(value, 'placement'), false);
+  assert.equal(Object.hasOwn(value, 'futureOption'), false);
   assert.equal(value.opacity, .2); assert.equal(value.originalColor, '#FFFFFF'); assert.deepEqual(value.customFilters, ['^Bass:']);
 });
-test('legacy layout options are ignored and compact double mode is migrated', () => {
-  const value = sanitizeConfig({
-    placement: 'left', screenMode: 'all', spaceMode: 'current',
-    fontName: 'Menlo', screenOverrides: { screen: { fontSize: 20 } },
-    displayMode: 'bilingualCompact',
-  });
-  assert.equal(value.displayMode, 'bilingual');
-  for (const key of ['placement', 'screenMode', 'spaceMode', 'fontName', 'screenOverrides'])
-    assert.equal(Object.hasOwn(value, key), false);
-});
-test('color mode migrates old settings without losing custom colors', () => {
-  assert.equal(sanitizeConfig({ automaticColor: false, originalColor: '#123456' }).colorMode, 'custom');
-  const value = sanitizeConfig({ colorMode: 'cover', automaticColor: true, originalColor: '#123456' });
-  assert.equal(value.colorMode, 'cover'); assert.equal(value.automaticColor, false); assert.equal(value.originalColor, '#123456');
+test('color mode and custom colors are validated without legacy migration', () => {
+  const value = sanitizeConfig({ colorMode: 'cover', originalColor: '#123456' });
+  assert.equal(value.colorMode, 'cover'); assert.equal(value.originalColor, '#123456');
   assert.equal(sanitizeConfig({ colorMode: 'invalid' }).colorMode, 'system');
-  assert.equal(sanitizeConfig({ colorMode: 'system', automaticColor: false }).automaticColor, true);
 });
 test('cover color comes from cover data and is cleared when unavailable', () => {
   const withAppearance = appearance => displayState({ ...snapshot, appearance }, [], [], config);

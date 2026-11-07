@@ -152,8 +152,8 @@ final class LyricView: NSView {
         super.draw(dirtyRect)
         let alpha = config.opacity * (state.dimmed ? 0.45 : 1)
         let coverColor = state.coverColor.map { NSColor(hex: $0) }
-        let originalColor: NSColor = config.colorMode == "cover" ? (coverColor ?? .labelColor) : config.automaticColor ? .labelColor : NSColor(hex: config.originalColor)
-        let translationColor: NSColor = config.colorMode == "cover" ? (coverColor ?? .labelColor) : config.automaticColor ? .labelColor : NSColor(hex: config.translationColor)
+        let originalColor: NSColor = config.colorMode == "cover" ? (coverColor ?? .labelColor) : config.colorMode == "custom" ? NSColor(hex: config.originalColor) : .labelColor
+        let translationColor: NSColor = config.colorMode == "cover" ? (coverColor ?? .labelColor) : config.colorMode == "custom" ? NSColor(hex: config.translationColor) : .labelColor
         if compact { return }
         if showsPlaybackControls {
             let frames = compactControlFrames(in: bounds)

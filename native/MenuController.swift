@@ -4,18 +4,12 @@ import WebKit
 final class MenuController: NSObject {
     var config = LyricsConfig()
     var state = LyricState()
-    var connectionText = "正在连接 EchoMusic…"
-    var layoutNote = "" { didSet {
-        if layoutNote != oldValue { bridge?.send(["type": "nativeStatus", "text": layoutNote]) }
-    } }
     let statusItem = NSStatusBar.system.statusItem(withLength: 280)
     let statusView = LyricView(frame: NSRect(x: 0, y: 0, width: 280, height: NSStatusBar.system.thickness))
     var layout: LayoutCoordinator!
     private var bridge: BridgeConnection?
     private var settingsWindow: NSWindow?
-    private var settingsView: WKWebView?
     private var settingsURL: URL?
-    private var observers: [NSObjectProtocol] = []
     private var demo = false
     private var connected = false
 
@@ -28,10 +22,6 @@ final class MenuController: NSObject {
         }
         statusView.controller = self
         layout = LayoutCoordinator(controller: self)
-        observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.layout.invalidateMenus() })
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in self?.layout.invalidateMenus() })
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.layout.invalidateMenus() })
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in self?.layout.invalidateMenus() })
         layout.start()
         if demo { startDemo() } else { connect() }
     }
@@ -40,7 +30,6 @@ final class MenuController: NSObject {
         guard let raw = environment["ECHO_LYRICS_ENDPOINT"], let url = URL(string: raw),
               url.scheme == "ws", url.host == "127.0.0.1", url.port != nil, url.path == "/live",
               let protocolName = environment["ECHO_LYRICS_PROTOCOL"], protocolName.hasPrefix("echo-lyrics.") else {
-            connectionText = "请从 EchoMusic 插件管理启动；也可用 --demo 预览。"
             state.primary = "EchoMusic · 未连接"; layout.update(); return
         }
         var settingsComponents = URLComponents(url: url, resolvingAgainstBaseURL: false)!
@@ -49,7 +38,7 @@ final class MenuController: NSObject {
         let connection = BridgeConnection(endpoint: url, protocolName: protocolName)
         connection.onStatus = { [weak self] online, text in
             guard let self else { return }
-            self.connected = online; self.connectionText = text
+            self.connected = online
             if online {
                 self.bridge?.send(["type": "hello", "role": "native"])
             }
@@ -64,13 +53,10 @@ final class MenuController: NSObject {
         if type == "nativeAction" {
             if message["action"] as? String == "showSettings" { showSettings() }
         } else if type == "config", let values = message["config"] as? [String: Any] {
-            config = LyricsConfig.from(values); layout.update(force: true)
-            bridge?.send(["type": "nativeStatus", "text": "菜单栏组件已连接；歌词使用状态栏自身预留空间。"])
+            config = LyricsConfig.from(values); layout.update()
         } else if type == "state", let values = message["state"] as? [String: Any],
                   let data = try? JSONSerialization.data(withJSONObject: values), let value = try? JSONDecoder().decode(LyricState.self, from: data) {
             state = value; layout.update()
-        } else if type == "ack", message["ok"] as? Bool == false {
-            connectionText = message["error"] as? String ?? "操作未完成，请重试。"
         }
     }
     func patch(_ values: [String: Any]) {
@@ -80,9 +66,9 @@ final class MenuController: NSObject {
             else if config.displayMode == "bilingual" { state.primary = state.original; state.secondary = state.translation }
             else if config.displayMode == "bilingualInline" { state.primary = [state.original, state.translation].filter { !$0.isEmpty }.joined(separator: "  ·  "); state.secondary = "" }
             else { state.primary = state.translation; state.secondary = "" }
-            layout.update(force: true)
+            layout.update()
         } else {
-            guard connected else { connectionText = "尚未连接，设置未保存；连接后请重试。"; return }
+            guard connected else { return }
             bridge?.send(["type": "configure", "patch": values, "id": UUID().uuidString])
         }
     }
@@ -125,7 +111,6 @@ final class MenuController: NSObject {
     func showSettings() {
         if settingsWindow == nil {
             let webView = WKWebView(frame: .zero)
-            settingsView = webView
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 740), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
             window.contentView = webView
             if let settingsURL { webView.load(URLRequest(url: settingsURL)) }
@@ -138,7 +123,6 @@ final class MenuController: NSObject {
         NSApp.activate(ignoringOtherApps: true); settingsWindow?.makeKeyAndOrderFront(nil)
     }
     private func startDemo() {
-        connectionText = "演示模式 · 使用示例歌词，不控制实际播放器"
         state = LyricState(trackId: "demo", title: "Windowlight", artist: "EchoMusic Demo", hasTrack: true, isPlaying: true,
                            isFavorite: false, primary: "月光落在你经过的窗前", secondary: "", original: "Moonlight falls by your window",
                            translation: "月光落在你经过的窗前", reason: "lyric", hidden: false, dimmed: false)
@@ -147,7 +131,6 @@ final class MenuController: NSObject {
     func stop() {
         bridge?.stop(); layout.stop()
         NSStatusBar.system.removeStatusItem(statusItem)
-        for observer in observers { NotificationCenter.default.removeObserver(observer); NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         settingsWindow?.close()
     }
 }

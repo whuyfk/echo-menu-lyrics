@@ -44,7 +44,7 @@ test('session authenticates connections, rejects stale commands, and cleans up',
   } finally { await session.dispose(); }
   assert.deepEqual(data.terminated, [123]); assert.equal(data.closed, 1); assert.equal(data.subscriber, null);
 });
-test('both settings entrances share the same page and settings clients cannot impersonate native status', async () => {
+test('both settings entrances share the same page and preview service', async () => {
   const { ctx, data, socket } = fixture(); const session = createSession(ctx);
   try {
     await session.start();
@@ -53,8 +53,6 @@ test('both settings entrances share the same page and settings clients cannot im
     assert.equal(data.options.onRequest({ path: '/other' }).status, 404);
     data.options.onConnection(socket);
     socket.receive({ data: JSON.stringify({ type: 'hello', role: 'settings' }) });
-    socket.receive({ data: JSON.stringify({ type: 'nativeStatus', text: 'spoofed' }) });
-    await turn(); assert.notEqual(session.status, 'spoofed');
     socket.receive({ data: JSON.stringify({ type: 'preview', patterns: [], id: 'preview' }) });
     const preview = await waitForMessage(socket, 'preview');
     assert.equal(preview.lines[0].translation, '你好');

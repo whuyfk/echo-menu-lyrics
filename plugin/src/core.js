@@ -1,7 +1,7 @@
 export const DEFAULTS = Object.freeze({
-  version: 1, enabled: true, maxWidth: 280,
+  enabled: true, maxWidth: 280,
   displayMode: 'translation', fontSize: 13, fontWeight: 'medium',
-  colorMode: 'system', automaticColor: true, originalColor: '#FFFFFF', translationColor: '#CDE8FF', opacity: 1,
+  colorMode: 'system', originalColor: '#FFFFFF', translationColor: '#CDE8FF', opacity: 1,
   progressiveHighlight: true, unplayedOpacity: .35,
   longLine: 'ellipsis', scrollSpeed: 28, scrollDelay: 1.5, offsetMs: 0,
   idleBehavior: 'title', pauseBehavior: 'keep', pauseDelay: 10,
@@ -34,7 +34,7 @@ export class CoverColorState {
 export function sanitizeConfig(input = {}) {
   if (!input || typeof input !== 'object') input = {};
   const out = { ...DEFAULTS };
-  for (const key of ['enabled', 'automaticColor', 'filterCredits', 'progressiveHighlight'])
+  for (const key of ['enabled', 'filterCredits', 'progressiveHighlight'])
     if (typeof input[key] === 'boolean') out[key] = input[key];
   const enums = {
     colorMode: ['system', 'cover', 'custom'],
@@ -42,9 +42,6 @@ export function sanitizeConfig(input = {}) {
     longLine: ['ellipsis', 'scroll'], idleBehavior: ['title', 'hold', 'hide'], pauseBehavior: ['keep', 'dim', 'hide'],
   };
   for (const [key, values] of Object.entries(enums)) if (values.includes(input[key])) out[key] = input[key];
-  if (input.displayMode === 'bilingualCompact') out.displayMode = 'bilingual';
-  if (!enums.colorMode.includes(input.colorMode)) out.colorMode = input.automaticColor === false ? 'custom' : 'system';
-  out.automaticColor = out.colorMode === 'system';
   const limits = { maxWidth: [128, 800], fontSize: [9, 24], opacity: [.2, 1], scrollSpeed: [8, 100],
     scrollDelay: [0, 8], offsetMs: [-30000, 30000], pauseDelay: [0, 300], unplayedOpacity: [.1, .8] };
   for (const [key, [min, max]] of Object.entries(limits))

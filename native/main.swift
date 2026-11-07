@@ -81,7 +81,7 @@ func selfTest() {
 func renderChecks(_ directory: String) {
     _ = NSApplication.shared
     try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-    var config = LyricsConfig(); config.automaticColor = false; config.originalColor = "#EF85B9"; config.translationColor = "#699ED4"
+    var config = LyricsConfig(); config.colorMode = "custom"; config.originalColor = "#EF85B9"; config.translationColor = "#699ED4"
     let cases: [(String, String, String, Double, Bool, CGFloat)] = [
         ("single-unplayed", "月光落在你经过的窗前", "", 0, false, 180),
         ("single-half", "月光落在你经过的窗前", "", 2000, false, 180),

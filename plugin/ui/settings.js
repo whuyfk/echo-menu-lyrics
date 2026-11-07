@@ -1,4 +1,5 @@
 (() => {
+  if (window.top === window) document.documentElement.classList.add('standalone');
   const $ = selector => document.querySelector(selector);
   let socket, config = {}, state = {}, sequence = 0, reconnect, filterDirty = false;
   const pendingFilters = new Set();
@@ -45,7 +46,6 @@
   field(c, 'scrollSpeed', '滚动速度（点/秒）', 'number', {min:8,max:100});
   field(c, 'scrollDelay', '滚动前停留（秒）', 'number', {min:0,max:8,step:.5});
   c = card(panels.display, '显示方式'); c.append(element('p', '歌词完全使用 macOS 原生状态栏项：跨桌面、全屏隐藏及鼠标移到顶部时恢复均由系统管理。双行模式使用原生状态栏高度自动缩放两层文字。'));
-  const note = element('div', '', 'note'); note.id = 'layout-note'; note.hidden = true; c.append(note);
   const permissionActions=element('div','','actions');c.append(permissionActions);
   const restart = element('button', '重启菜单栏组件'); restart.type = 'button'; restart.addEventListener('click', () => send('nativeAction', {action:'restart'})); permissionActions.append(restart);
   c = card(panels.appearance, '文字');
@@ -114,7 +114,6 @@
     socket.addEventListener('message',event=>{
       let v;try{v=JSON.parse(event.data);}catch{return;}
       if(v.type==='config')applyConfig(v.config);else if(v.type==='state')renderState(v.state);
-      else if(v.type==='nativeStatus'){note.textContent=v.text;note.hidden=!v.text;}
       else if(v.type==='ack'){if(!v.ok)message(v.error||'操作未完成，请重试',true);else if(pendingFilters.delete(v.id)){filterDirty=false;message('规则已保存');}else if(!v.dispatched)message('设置已保存');}
       else if(v.type==='preview'){preview.replaceChildren();v.lines.forEach(line=>{const row=element('div'),text=element(line.hidden?'s':'span',`${(line.startMs/1000).toFixed(1)}s  ${line.original}${line.translation?' / '+line.translation:''}`);row.append(text);preview.append(row);});message(`共 ${v.lines.length} 行，命中 ${v.lines.filter(x=>x.hidden).length} 行`);}
     });

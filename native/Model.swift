@@ -2,13 +2,11 @@ import AppKit
 import CoreText
 
 struct LyricsConfig: Codable, Equatable {
-    var version = 1
     var enabled = true
     var maxWidth = 280.0
     var displayMode = "translation"
     var fontSize = 13.0
     var fontWeight = "medium"
-    var automaticColor = true
     var colorMode = "system"
     var originalColor = "#FFFFFF"
     var translationColor = "#CDE8FF"

@@ -6,13 +6,11 @@ final class LayoutCoordinator {
 
     init(controller: MenuController) { self.controller = controller }
     func start() { update() }
-    func invalidateMenus() { update() }
 
-    func update(force: Bool = false) {
+    func update() {
         guard let controller, !stopped else { return }
         let config = controller.config, state = controller.state
         controller.statusItem.isVisible = config.enabled && !state.hidden
-        controller.layoutNote = ""
         guard controller.statusItem.isVisible else {
             controller.statusView.update(state: state, config: config, compact: true)
             return

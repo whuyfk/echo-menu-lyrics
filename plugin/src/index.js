@@ -136,8 +136,6 @@ export function createSession(ctx) {
           try { if (!disposed) receiveSnapshot(await ctx.nowPlaying.getSnapshot()); } catch {}
         }, 200);
         actionTimers.add(timer);
-      } else if (message.type === 'nativeStatus' && nativeClients.has(socket) && typeof message.text === 'string') {
-        setStatus(message.text.slice(0, 500)); broadcast({ type: 'nativeStatus', text: message.text.slice(0, 500) });
       }
     } catch (error) { await send(socket, { type: 'ack', id: message.id, ok: false, error: error.message }); }
   };
