@@ -184,7 +184,7 @@ final class LayoutCoordinator {
         else if config.screenMode == "active" { targets = [NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? primary].compactMap { $0 } }
         var used: Set<String> = [], note = ""
         let trusted = AXIsProcessTrusted()
-        if usePanels && !trusted { note = "左侧停靠、指定桌面或显示器需要辅助功能权限，请从 EchoMusic 插件管理打开设置。" }
+        if usePanels && !trusted { note = "当前布局需要辅助功能权限读取菜单边界；请从 EchoMusic 插件管理打开设置。" }
         if cachedGeometry.ownerPID != (NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0) { panels.values.forEach { $0.orderOut(nil) } }
         else if usePanels && trusted && config.enabled && !state.hidden {
             for screen in targets {

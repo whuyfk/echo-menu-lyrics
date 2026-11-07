@@ -68,7 +68,15 @@ final class MenuController: NSObject {
             else if message["action"] as? String == "openAccessibility" { openAccessibility() }
         } else if type == "config", let values = message["config"] as? [String: Any] {
             config = LyricsConfig.from(values); layout.update(force: true)
-            bridge?.send(["type": "nativeStatus", "text": AXIsProcessTrusted() ? "菜单栏组件已连接" : "菜单栏组件已连接；左侧停靠需在系统设置中授予辅助功能权限。"])
+            let status: String
+            if !config.requiresMenuGeometry {
+                status = "菜单栏组件已连接；当前右侧单行模式无需辅助功能权限。"
+            } else if AXIsProcessTrusted() {
+                status = "菜单栏组件已连接"
+            } else {
+                status = "菜单栏组件已连接；当前选择的布局需要辅助功能权限，可在插件设置中打开系统授权。"
+            }
+            bridge?.send(["type": "nativeStatus", "text": status])
         } else if type == "state", let values = message["state"] as? [String: Any],
                   let data = try? JSONSerialization.data(withJSONObject: values), let value = try? JSONDecoder().decode(LyricState.self, from: data) {
             state = value; layout.update()

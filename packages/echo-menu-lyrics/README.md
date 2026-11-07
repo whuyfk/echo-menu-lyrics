@@ -3,7 +3,7 @@
 为 [EchoMusic](https://github.com/hoowhoami/EchoMusicPlugins) 提供原生 macOS 菜单栏歌词。
 鼠标移入歌词，原位置显示 **播放模式、上一首、播放／暂停、下一首、收藏**；移出恢复歌词。
 
-**0.2.2 开发预览版 · macOS 13+ · EchoMusic 2.3.2+ · MIT**
+**0.2.3 开发预览版 · macOS 13+ · EchoMusic 2.3.2+ · MIT**
 
 ## 功能
 
@@ -34,7 +34,8 @@ https://github.com/whuyfk/echo-menu-lyrics
 默认目录为 `~/Library/Application Support/echo-music/plugins`，以播放器页面显示为准。
 
 首次启动或程序文件更新后，EchoMusic 会请求原生程序运行确认。
-左侧定位、指定桌面和双行排版使用原位浮层，需要辅助功能权限读取菜单边界；
+新安装默认使用右侧状态栏歌词和“所有桌面”范围，不需要读取其他应用的菜单。
+选择“仅当前桌面”、左侧定位、非主显示器或双行浮层后，插件才会请求辅助功能权限读取菜单边界；
 系统可能将权限归属到 EchoMusic，请以系统设置实际显示为准。
 
 **预编译组件为 ad-hoc 签名，未做 Developer ID 签名及公证。**
@@ -46,8 +47,8 @@ https://github.com/whuyfk/echo-menu-lyrics
 右键歌词选择「歌词设置」，或从 EchoMusic 插件管理打开设置。
 
 - **宽度**是上限，短句自动收缩。屏幕独立宽度优先于统一宽度；需要时可恢复统一设置。
-- **显示器范围**选择实体显示器；**桌面范围**选择仅当前桌面或全部桌面／全屏空间。
-- 「仅当前桌面」固定到启动组件或选择此项时所在桌面；在目标桌面重启组件可重新固定。
+- **显示器范围**选择实体显示器；**桌面范围**默认显示在全部桌面／全屏空间，也可改为仅当前桌面。
+- 「仅当前桌面」是可选的原位浮层模式，需要辅助功能权限；它固定到启动组件或选择此项时所在桌面，在目标桌面重启组件可重新固定。
 - 双行两侧利用完整菜单行高度，优先使用设置字号，超出可用高度才缩小。
 - 封面色直接读取宿主取色结果，不修改主程序主题，也不额外请求封面。
 - 无法安全读取菜单边界或空间不足时收起歌词，可从插件管理再次打开设置。
@@ -77,7 +78,7 @@ npm run check:generated
 - `plugin/src/`、`plugin/ui/`：播放器桥接、歌词逻辑及共用设置页。
 - `native/`：Swift / AppKit / Core Text 原生渲染、定位与交互。
 - `packages/echo-menu-lyrics/`：**已构建、可直接安装的插件目录**，供在线插件源从仓库 ZIP 安装。
-- `dist/echo-menu-lyrics-0.2.2-macos.zip`：本机构建的分发 ZIP，不纳入 Git。
+- `dist/echo-menu-lyrics-0.2.3-macos.zip`：本机构建的分发 ZIP，不纳入 Git。
 - `scripts/`：构建、分发准备、包校验及本地安装；`tests/`：自动检查。
 
 修改源码后运行上述完整命令，提交更新后的源码和 `packages/echo-menu-lyrics/`。

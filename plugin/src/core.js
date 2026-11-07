@@ -1,5 +1,5 @@
 export const DEFAULTS = Object.freeze({
-  version: 1, enabled: true, placement: 'right', screenMode: 'primary', spaceMode: 'current', maxWidth: 280,
+  version: 1, enabled: true, placement: 'right', screenMode: 'primary', spaceMode: 'all', maxWidth: 280,
   displayMode: 'translation', fontName: 'system', fontSize: 13, fontWeight: 'medium',
   colorMode: 'system', automaticColor: true, originalColor: '#FFFFFF', translationColor: '#CDE8FF', opacity: 1,
   progressiveHighlight: true, unplayedOpacity: .35,

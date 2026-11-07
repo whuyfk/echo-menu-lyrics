@@ -11,7 +11,7 @@ struct LyricsConfig: Codable, Equatable {
     var enabled = true
     var placement = "right"
     var screenMode = "primary"
-    var spaceMode = "current"
+    var spaceMode = "all"
     var maxWidth = 280.0
     var displayMode = "translation"
     var fontName = "system"
@@ -50,6 +50,9 @@ struct LyricsConfig: Codable, Equatable {
         result.maxWidth = override.maxWidth ?? maxWidth
         result.fontSize = override.fontSize ?? fontSize
         return result
+    }
+    var requiresMenuGeometry: Bool {
+        placement == "left" || screenMode != "primary" || spaceMode == "current" || displayMode == "bilingual"
     }
 }
 

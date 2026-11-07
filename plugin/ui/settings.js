@@ -41,13 +41,13 @@
   field(c, 'enabled', '显示菜单栏歌词', 'checkbox');
   field(c, 'placement', '停靠位置', [['left', '应用菜单之后'], ['right', '状态图标左侧']], null, '切换应用时重新读取菜单边界');
   field(c, 'screenMode', '显示器范围', [['primary', '主显示器'], ['active', '鼠标所在显示器'], ['all', '所有显示器']]);
-  field(c, 'spaceMode', '桌面范围', [['current', '仅当前桌面'], ['all', '所有桌面与全屏空间']], null, '仅当前桌面固定在组件启动时所在的桌面；重启组件可重新固定');
+  field(c, 'spaceMode', '桌面范围', [['all', '所有桌面与全屏空间'], ['current', '仅当前桌面（需要辅助功能）']], null, '默认显示在所有桌面；仅当前桌面固定在组件启动时所在的桌面，重启组件可重新固定');
   field(c, 'displayMode', '歌词语言', [['translation', '译文优先'], ['original', '原文'], ['bilingual', '原文与译文']]);
   field(c, 'maxWidth', '歌词最大宽度（点）', 'number', {min:128,max:800,step:1}, '按内容收缩；至少 128 点以容纳五个按钮');
   field(c, 'longLine', '长句显示', [['ellipsis','省略'],['scroll','滚动']]);
   field(c, 'scrollSpeed', '滚动速度（点/秒）', 'number', {min:8,max:100});
   field(c, 'scrollDelay', '滚动前停留（秒）', 'number', {min:0,max:8,step:.5});
-  c = card(panels.display, '菜单边界与权限'); c.append(element('p', '左侧停靠需要辅助功能权限读取菜单位置。边界不可确认时收起歌词，可从 EchoMusic 插件管理打开设置。'));
+  c = card(panels.display, '菜单边界与权限'); c.append(element('p', '右侧、主显示器、所有桌面的单行歌词无需辅助功能权限。选择仅当前桌面、左侧停靠、非主显示器或双语浮层后，插件才会请求权限读取菜单边界。'));
   const note = element('div', '', 'note'); note.id = 'layout-note'; note.hidden = true; c.append(note);
   const permissionActions=element('div','','actions');c.append(permissionActions);
   const access = element('button', '打开辅助功能设置'); access.type = 'button'; access.addEventListener('click', () => send('nativeAction', {action:'openAccessibility'})); permissionActions.append(access);
