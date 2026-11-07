@@ -1,0 +1,8 @@
+.build/
+.research/
+dist/
+.DS_Store
+node_modules/
+制作计划.md
+开发工作总结.md
+验证记录.md
