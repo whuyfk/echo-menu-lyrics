@@ -1,4 +1,4 @@
-import { DEFAULTS, CoverColorState, sanitizeConfig, validateFilters, normalizeLines, displayState } from './core.js';
+import { DEFAULTS, CoverColorState, sanitizeConfig, validateFilters, normalizeLines, playbackWithLiveClock, displayState, nextDisplayDelay } from './core.js';
 import { FilterRunner } from './filters.js';
 import { registerSettings } from './settings.js';
 
@@ -7,7 +7,8 @@ export function createSession(ctx) {
   let lastVisible = null, pausedAt = null, lastPlaying = null, disposed = false, helperPid = 0;
   let server = null, filterGeneration = 0, filterPending = false, currentState = null, status = '正在初始化…', launching = false;
   let launchGeneration = 0, configureQueue = Promise.resolve();
-  let tickTimer = null;
+  let displayTimer = null;
+  const playerStore = ctx.player?.store;
   const coverColors = new CoverColorState();
   let coverTimer = null, coverExpiresAt = 0;
   const clients = new Set(), nativeClients = new Set(), listeners = new Set(), timers = [], actionTimers = new Set(), cleanups = [];
@@ -23,21 +24,26 @@ export function createSession(ctx) {
     const playMode = ctx.player?.playMode?.value ?? snapshot.playback?.playMode;
     const theme = ctx.stores?.theme;
     const now = Date.now();
+    const playback = playbackWithLiveClock(snapshot.playback, playerStore?.playbackClock);
+    if (playback?.isPlaying !== lastPlaying) {
+      pausedAt = playback?.isPlaying === false ? now : null;
+      lastPlaying = playback?.isPlaying;
+    }
     const cover = coverColors.resolve({ trackId: snapshot.playback?.trackId, coverUrl: snapshot.playback?.coverUrl,
       color: theme?.coverColor ?? snapshot.appearance?.coverColor, ready: theme ? theme.coverColorReady : !!snapshot.appearance?.coverColor }, now);
     if (cover.expiresAt !== coverExpiresAt) {
       clearTimeout(coverTimer); coverExpiresAt = cover.expiresAt;
       coverTimer = cover.expiresAt ? setTimeout(emit, Math.max(1, cover.expiresAt - now)) : null;
     }
-    const state = displayState({ ...snapshot, appearance: { ...snapshot.appearance, coverColor: cover.color, coverColorPending: cover.pending }, playback: snapshot.playback ? { ...snapshot.playback, playMode } : null }, lines, hidden, config, now, lastVisible, pausedAt, filterPending);
+    const displaySnapshot = { ...snapshot, appearance: { ...snapshot.appearance, coverColor: cover.color, coverColorPending: cover.pending }, playback: playback ? { ...playback, playMode } : null };
+    const state = displayState(displaySnapshot, lines, hidden, config, now, lastVisible, pausedAt, filterPending);
     if (state.reason === 'lyric') lastVisible = state;
     const text = JSON.stringify(state);
     if (text !== currentState) { currentState = text; broadcast({ type: 'state', state }); notify(); }
-  };
-  const tick = () => {
-    if (disposed) return;
-    emit();
-    tickTimer = setTimeout(tick, snapshot.playback?.isPlaying ? 100 : 1000);
+    // Wake at the next lyric boundary, and replace the timer whenever the clock or settings change.
+    clearTimeout(displayTimer);
+    const delay = nextDisplayDelay(displaySnapshot, lines, config, now, pausedAt, filterPending);
+    displayTimer = delay == null ? null : setTimeout(emit, Math.max(1, Math.ceil(delay - (Date.now() - now))));
   };
   const refilter = async () => {
     const generation = ++filterGeneration;
@@ -66,7 +72,6 @@ export function createSession(ctx) {
     }
     const p = snapshot.playback;
     if (p?.trackId !== previousTrack) { lastVisible = null; pausedAt = null; lastPlaying = null; }
-    if (p?.isPlaying !== lastPlaying) { pausedAt = p?.isPlaying ? null : Date.now(); lastPlaying = p?.isPlaying; }
     const l = snapshot.lyric;
     const nextSignature = [p?.trackId, l?.trackId, l?.revision ?? JSON.stringify(l?.lines ?? [])].join('|');
     if (signature !== nextSignature) { signature = nextSignature; lines = normalizeLines(snapshot); void refilter(); }
@@ -176,17 +181,17 @@ export function createSession(ctx) {
       if (!server.ok) throw new Error(server.error || '本机歌词服务启动失败');
       notify();
       cleanups.push(ctx.nowPlaying.onSnapshot(receiveSnapshot));
+      if (playerStore && 'playbackClock' in playerStore && ctx.vue?.watch) cleanups.push(ctx.vue.watch(() => playerStore.playbackClock, emit));
       if (ctx.player?.playMode && ctx.vue?.watch) cleanups.push(ctx.vue.watch(ctx.player.playMode, emit));
       if (ctx.stores?.theme && ctx.vue?.watch) cleanups.push(ctx.vue.watch(() => [ctx.stores.theme.coverColor, ctx.stores.theme.coverColorReady], emit));
       receiveSnapshot(await ctx.nowPlaying.getSnapshot());
-      tick();
       timers.push(setInterval(() => broadcast({ type: 'heartbeat' }), 3000));
       timers.push(setInterval(async () => { try { if (!disposed) receiveSnapshot(await ctx.nowPlaying.getSnapshot()); } catch {} }, 3000));
       await launch();
     },
     async dispose() {
       if (disposed) return; disposed = true; ++launchGeneration; ++filterGeneration;
-      clearTimeout(tickTimer);
+      clearTimeout(displayTimer);
       clearTimeout(coverTimer);
       timers.forEach(clearInterval); actionTimers.forEach(clearTimeout); actionTimers.clear(); cleanups.forEach(fn => fn?.());
       filter.dispose(); previewFilter.dispose(); listeners.clear();

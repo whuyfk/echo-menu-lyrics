@@ -95,6 +95,35 @@ test('configuration updates are serialized and invalid regex is never persisted'
     await session.configure({ fontSize: 15 }); assert.equal(session.config.fontSize, 15);
   } finally { await session.dispose(); }
 });
+test('lyrics change at the next timestamp and replan after live seek and pause', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 10000 });
+  const { ctx, snapshot } = fixture();
+  Object.assign(snapshot.playback, { isPlaying: true, currentTime: .1, updatedAt: Date.now() });
+  snapshot.lyric.lines.push({ time: .274, text: 'second' }, { time: .5, text: 'third' });
+  ctx.storage.get = async () => ({ filterCredits: false, pauseBehavior: 'hide', pauseDelay: .2 });
+  const store = { playbackClock: null };
+  let onClockChange, unsubscribed = false;
+  ctx.player = { store };
+  ctx.vue = { watch: (_source, callback) => { onClockChange = callback; return () => { unsubscribed = true; }; } };
+  const session = createSession(ctx);
+  try {
+    await session.start();
+    t.mock.timers.tick(173); assert.equal(session.state.primary, '你好');
+    t.mock.timers.tick(1); assert.equal(session.state.primary, 'second');
+
+    // The player has already sought backwards, even though the snapshot hasn't arrived yet.
+    store.playbackClock = { trackId: 'one', positionMs: 50, sampledAt: Date.now(), isPlaying: true, playbackRate: 2 };
+    onClockChange(); assert.equal(session.state.primary, '你好');
+    t.mock.timers.tick(111); assert.equal(session.state.primary, '你好');
+    t.mock.timers.tick(1); assert.equal(session.state.primary, 'second');
+
+    store.playbackClock = { ...store.playbackClock, positionMs: 274, sampledAt: Date.now(), isPlaying: false };
+    onClockChange(); assert.equal(session.state.isPlaying, false);
+    t.mock.timers.tick(199); assert.equal(session.state.hidden, false); assert.equal(session.state.primary, 'second');
+    t.mock.timers.tick(1); assert.equal(session.state.hidden, true);
+  } finally { await session.dispose(); }
+  assert.equal(unsubscribed, true);
+});
 test('host cover extraction streams independently of the theme accent and unsubscribes', async () => {
   const { ctx, data, snapshot } = fixture();
   snapshot.appearance = { accentColor: '#ff0000' };

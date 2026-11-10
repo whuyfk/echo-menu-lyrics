@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CoverColorState, sanitizeConfig, validateFilters, evaluateFilters, normalizeLines, normalizeCharacterTiming, estimatedPlaybackMs, findLineIndex, displayState } from '../plugin/src/core.js';
+import { CoverColorState, sanitizeConfig, validateFilters, evaluateFilters, normalizeLines, normalizeCharacterTiming, playbackWithLiveClock, estimatedPlaybackMs, findLineIndex, displayState, nextDisplayDelay } from '../plugin/src/core.js';
 
 const config = sanitizeConfig();
 const snapshot = {
@@ -121,6 +121,20 @@ test('clock respects pause, buffering, speed, duration and stale-sample limits',
 test('last duplicate timestamp wins and pre-roll has no future line', () => {
   const lines = [{ startMs: 1000 }, { startMs: 1000 }, { startMs: 2000 }];
   assert.equal(findLineIndex(lines, 999), -1); assert.equal(findLineIndex(lines, 1000), 1);
+});
+test('line deadlines honor offsets, duplicate timestamps and the playback clock limit', () => {
+  const playback = { ...snapshot.playback, currentTime: .5, playbackRate: 2 };
+  const s = { playback, lyric: { timeOffset: 100 } };
+  const settings = { ...config, offsetMs: 100 };
+  const lines = [{ startMs: 1000 }, { startMs: 1000 }, { startMs: 1500 }];
+  assert.equal(nextDisplayDelay(s, lines, settings, 1000), 150);
+  assert.equal(nextDisplayDelay(s, lines, settings, 1150), 250);
+  assert.equal(nextDisplayDelay(s, [{ startMs: 4301 }], settings, 1000), null);
+  assert.equal(nextDisplayDelay({ ...s, playback: { ...playback, duration: .7 } }, lines, settings, 1000), null);
+  const clock = { trackId: 'one', positionMs: 600, sampledAt: 1100, isPlaying: true, isAdvancing: false };
+  assert.equal(nextDisplayDelay({ ...s, playback: playbackWithLiveClock(playback, clock) }, lines, settings, 1100), null);
+  assert.equal(playbackWithLiveClock(playback, { ...clock, trackId: 'other' }), playback);
+  assert.equal(playbackWithLiveClock(playback, { ...clock, sampledAt: 999 }), playback);
 });
 test('translation fallback and bilingual display do not alter host settings', () => {
   const lines = normalizeLines(snapshot), hidden = [false, false, false];

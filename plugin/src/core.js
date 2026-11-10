@@ -113,37 +113,48 @@ export function normalizeCharacterTiming(text, characters) {
   return result;
 }
 
-export function lineTiming(snapshot, lines, index, config, now) {
+const CLOCK_LIMIT_MS = 1800;
+
+export function playbackWithLiveClock(playback, clock) {
+  if (!playback || !clock || String(clock.trackId) !== String(playback.trackId) ||
+      !Number.isFinite(clock.positionMs) || !Number.isFinite(clock.sampledAt) || clock.sampledAt <= 0 ||
+      clock.sampledAt < (playback.clock?.sampledAt ?? playback.updatedAt ?? 0)) return playback;
+  return { ...playback, isPlaying: clock.isPlaying ?? playback.isPlaying, clock };
+}
+
+function samplePlayback(playback, now) {
+  const clock = playback.clock;
+  const position = Number(clock?.positionMs ?? Number(playback.currentTime || 0) * 1000);
+  const rate = Math.max(.1, Number(clock?.playbackRate ?? playback.playbackRate ?? 1) || 1);
+  const advancing = !!(clock?.isPlaying ?? playback.isPlaying) && (clock?.isAdvancing ?? true);
+  const duration = Number(clock?.durationMs ?? Number(playback.duration || 0) * 1000);
+  const age = Math.max(0, now - Number(clock?.sampledAt ?? playback.updatedAt ?? now));
+  // Freeze stale samples instead of running ahead indefinitely after sleep/disconnect.
+  const time = Math.max(0, position + (advancing ? Math.min(CLOCK_LIMIT_MS, age) * rate : 0));
+  return { time: duration > 0 ? Math.min(time, duration) : time, rate, advancing, duration,
+    advanceLimitMs: Math.max(0, CLOCK_LIMIT_MS - age) };
+}
+
+const lyricOffset = (snapshot, config) => Number(snapshot.lyric?.timeOffset || 0) + config.offsetMs;
+
+function lineTiming(snapshot, lines, index, config, now, timelineMs, sample) {
   const line = lines[index], p = snapshot.playback;
-  const next = lines.slice(index + 1).find(x => x.startMs > line.startMs);
+  const next = lines[index + 1];
   const lastCharacterEnd = Math.max(0, ...line.originalTiming.map(x => x.endMs));
   const endMs = lastCharacterEnd > line.startMs ? lastCharacterEnd : next?.startMs ?? Math.max(line.startMs + 1000, Number(p.duration || 0) * 1000);
-  const sampleAt = Number(p.clock?.sampledAt ?? p.updatedAt ?? now);
   const originalFirst = config.displayMode !== 'translation' || !line.translation;
   const inlineBilingual = config.displayMode === 'bilingualInline' && !!line.translation;
   const doubleBilingual = config.displayMode === 'bilingual' && !!line.translation;
   return {
-    timelineMs: estimatedPlaybackMs(p, now) + Number(snapshot.lyric?.timeOffset || 0) + config.offsetMs,
-    sampledAt: now, startMs: line.startMs, endMs,
-    advancing: !!(p.clock?.isPlaying ?? p.isPlaying) && (p.clock?.isAdvancing ?? true),
-    rate: Math.max(.1, Number(p.clock?.playbackRate ?? p.playbackRate ?? 1) || 1),
-    advanceLimitMs: Math.max(0, 1800 - Math.max(0, now - sampleAt)),
+    timelineMs, sampledAt: now, startMs: line.startMs, endMs,
+    advancing: sample.advancing, rate: sample.rate, advanceLimitMs: sample.advanceLimitMs,
     primary: inlineBilingual ? [] : originalFirst ? line.originalTiming : line.translationTiming,
     secondary: doubleBilingual ? line.translationTiming : [],
   };
 }
 
 export function estimatedPlaybackMs(playback, now = Date.now()) {
-  if (!playback) return 0;
-  const clock = playback.clock;
-  const position = Number(clock?.positionMs ?? Number(playback.currentTime || 0) * 1000);
-  const rate = Math.max(.1, Number(clock?.playbackRate ?? playback.playbackRate ?? 1) || 1);
-  const advancing = (clock?.isPlaying ?? playback.isPlaying) && (clock?.isAdvancing ?? true);
-  // Freeze stale samples instead of running ahead indefinitely after sleep/disconnect.
-  const elapsed = advancing ? Math.min(1800, Math.max(0, now - Number(clock?.sampledAt ?? playback.updatedAt ?? now))) : 0;
-  const time = Math.max(0, position + elapsed * rate);
-  const duration = Number(clock?.durationMs ?? Number(playback.duration || 0) * 1000);
-  return duration > 0 ? Math.min(time, duration) : time;
+  return playback ? samplePlayback(playback, now).time : 0;
 }
 
 export function findLineIndex(lines, timeMs) {
@@ -153,6 +164,24 @@ export function findLineIndex(lines, timeMs) {
     if (lines[mid].startMs <= timeMs) { result = mid; low = mid + 1; } else high = mid - 1;
   }
   return result;
+}
+
+export function nextDisplayDelay(snapshot, lines, config, now, pausedAt, filterPending) {
+  const playback = snapshot.playback;
+  if (!playback) return null;
+  if (!playback.isPlaying && pausedAt != null && config.pauseBehavior !== 'keep') {
+    const delay = pausedAt + config.pauseDelay * 1000 - now;
+    return delay > 0 ? delay : null;
+  }
+  if (filterPending || !lines.length) return null;
+  const sample = samplePlayback(playback, now);
+  if (!sample.advancing) return null;
+  const offset = lyricOffset(snapshot, config);
+  const timeline = sample.time + offset;
+  const next = lines[findLineIndex(lines, timeline) + 1];
+  if (!next || (sample.duration > 0 && next.startMs - offset > sample.duration)) return null;
+  const delay = (next.startMs - timeline) / sample.rate;
+  return delay > 0 && delay <= sample.advanceLimitMs ? delay : null;
 }
 
 export function displayState(snapshot, lines, hidden, config, now = Date.now(), lastVisible = null, pausedAt = null, filterPending = false) {
@@ -165,7 +194,8 @@ export function displayState(snapshot, lines, hidden, config, now = Date.now(), 
     coverColorPending: !!snapshot?.appearance?.coverColorPending, filterPending: !!filterPending,
     primary: '', secondary: '', original: '', translation: '', reason: 'empty', hidden: false, dimmed: false };
   if (!p) return { ...base, primary: 'EchoMusic', reason: 'empty' };
-  const index = findLineIndex(lines, estimatedPlaybackMs(p, now) + Number(snapshot.lyric?.timeOffset || 0) + config.offsetMs);
+  const sample = samplePlayback(p, now), timeline = sample.time + lyricOffset(snapshot, config);
+  const index = findLineIndex(lines, timeline);
   const line = index >= 0 ? lines[index] : null;
   if (filterPending) {
     base.reason = 'filtering';
@@ -177,7 +207,7 @@ export function displayState(snapshot, lines, hidden, config, now = Date.now(), 
     else if (config.displayMode === 'bilingual') { base.primary = line.original; base.secondary = line.translation; }
     else if (config.displayMode === 'bilingualInline') base.primary = [line.original, line.translation].filter(Boolean).join('  ·  ');
     else base.primary = line.original;
-    base.timing = lineTiming(snapshot, lines, index, config, now);
+    base.timing = lineTiming(snapshot, lines, index, config, now, timeline, sample);
   } else {
     base.reason = snapshot.lyric?.isLoading ? 'loading' : hidden[index] ? 'filtered' : lines.length ? 'interlude' : 'noLyrics';
     if (config.idleBehavior === 'hold' && lastVisible?.trackId === trackId) {
