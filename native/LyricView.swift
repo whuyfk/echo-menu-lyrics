@@ -1,6 +1,13 @@
 import AppKit
 import CoreText
 
+struct TextPaintSection {
+    var range: NSRange
+    var color: NSColor
+    var spans: [TimedSpan]
+    var followsProgress = true
+}
+
 private final class PlaybackButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {} // Symbols are drawn by LyricView using these same frames.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -14,10 +21,12 @@ final class LyricView: NSView {
     var config = LyricsConfig()
     var state = LyricState()
     var compact = false
-    var hovered = false
+    private(set) var hovered = false
+    private(set) var contextMenuOpen = false
     var textLayoutHeight: CGFloat?
     private var tracking: NSTrackingArea?
     private var animation: Timer?
+    private var hoverCheck: Timer?
     private var lineStarted = ProcessInfo.processInfo.systemUptime
     private var textKey = ""
     private var controlsWereVisible = false
@@ -26,7 +35,7 @@ final class LyricView: NSView {
         button.tag = index; button.isBordered = false; button.isHidden = true
         addSubview(button); return button
     }
-    var showsPlaybackControls: Bool { hovered && !compact && state.hasTrack }
+    var showsPlaybackControls: Bool { hovered && !contextMenuOpen && !compact && state.hasTrack }
     var visiblePlaybackCommands: [String] { showsPlaybackControls ? playbackCommands : [] }
     override var acceptsFirstResponder: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -36,6 +45,7 @@ final class LyricView: NSView {
         let key = state.trackId + "|" + state.primary + "|" + state.secondary
         if key != textKey { textKey = key; lineStarted = ProcessInfo.processInfo.systemUptime }
         self.state = state; self.config = config; self.compact = compact
+        if compact || !state.hasTrack || !config.enabled || state.hidden { setHovered(false) }
         setAccessibilityElement(true); setAccessibilityRole(.group)
         updateControls(); needsDisplay = true; updateAnimation()
     }
@@ -77,15 +87,41 @@ final class LyricView: NSView {
         if let tracking { removeTrackingArea(tracking) }
         let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
         addTrackingArea(area); tracking = area
+        if hovered { refreshHoverFromPointer() }
     }
-    private func setHovered(_ value: Bool) {
-        guard hovered != value else { return }
-        hovered = value; updateControls(); needsDisplay = true; updateAnimation()
+    func setHovered(_ value: Bool) {
+        let next = value && !contextMenuOpen && !compact && state.hasTrack && config.enabled && !state.hidden
+        guard hovered != next else { return }
+        hovered = next; updateControls(); needsDisplay = true; updateAnimation(); updateHoverMonitoring()
         if !hovered { controller?.layout.update() }
+    }
+    func beginContextMenu() {
+        contextMenuOpen = true
+        setHovered(false)
+    }
+    func endContextMenu() {
+        guard contextMenuOpen else { return }
+        contextMenuOpen = false
+        controller?.layout.update()
+        refreshHoverFromPointer()
+    }
+    private func refreshHoverFromPointer() {
+        guard let window, window.isVisible, !contextMenuOpen else { setHovered(false); return }
+        let point = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+        setHovered(bounds.contains(point))
+    }
+    private func updateHoverMonitoring() {
+        if hovered && window != nil && hoverCheck == nil {
+            // Status-item movement and modal menu tracking can lose a mouseExited event.
+            let timer = Timer(timeInterval: 0.12, repeats: true) { [weak self] _ in self?.refreshHoverFromPointer() }
+            timer.tolerance = 0.04
+            hoverCheck = timer; RunLoop.main.add(timer, forMode: .common)
+        } else if !hovered || window == nil { hoverCheck?.invalidate(); hoverCheck = nil }
     }
     override func mouseEntered(with event: NSEvent) { setHovered(true) }
     override func mouseExited(with event: NSEvent) { setHovered(false) }
     override func mouseDown(with event: NSEvent) {
+        guard !contextMenuOpen else { return }
         if event.modifierFlags.contains(.control) { rightMouseDown(with: event); return }
         if compact { controller?.showContextMenu(event: event, view: self); return }
         guard state.hasTrack else { return }
@@ -99,7 +135,7 @@ final class LyricView: NSView {
     }
     override func rightMouseDown(with event: NSEvent) { controller?.showContextMenu(event: event, view: self) }
     override func accessibilityPerformPress() -> Bool {
-        guard state.hasTrack, !compact else { return false }
+        guard state.hasTrack, !compact, !contextMenuOpen else { return false }
         setHovered(!hovered)
         return true
     }
@@ -145,8 +181,12 @@ final class LyricView: NSView {
             animation = timer; RunLoop.main.add(timer, forMode: .common)
         } else if !needsAnimation { animation?.invalidate(); animation = nil }
     }
-    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); updateAnimation() }
-    deinit { animation?.invalidate() }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { setHovered(false) }
+        updateAnimation(); updateHoverMonitoring()
+    }
+    deinit { animation?.invalidate(); hoverCheck?.invalidate() }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
@@ -177,7 +217,8 @@ final class LyricView: NSView {
             drawText(state.secondary, baseline: bottom - secondInk.minY, size: size.1, color: translationColor, alpha: alpha, spans: state.timing?.secondary ?? [], center: true)
         } else {
             let color = config.displayMode == "translation" && !state.translation.isEmpty ? translationColor : originalColor
-            drawText(state.primary, baseline: bounds.midY, size: size.0, color: color, alpha: alpha, spans: state.timing?.primary ?? [], center: false, opticalCenter: true)
+            drawText(state.primary, baseline: bounds.midY, size: size.0, color: color, alpha: alpha, spans: state.timing?.primary ?? [], center: false, opticalCenter: true,
+                     inlineTranslationColor: config.displayMode == "bilingualInline" ? translationColor : nil)
         }
     }
     private func drawSymbol(_ name: String, in rect: NSRect, color: NSColor, alpha: CGFloat, weight: NSFont.Weight = .medium) {
@@ -188,22 +229,19 @@ final class LyricView: NSView {
         let tinted = NSImage(size: image.size, flipped: false) { bounds in image.draw(in: bounds); color.set(); bounds.fill(using: .sourceIn); return true }
         tinted.draw(in: target, from: .zero, operation: .sourceOver, fraction: alpha)
     }
-    private func cutoff(_ line: CTLine, text: String, spans: [TimedSpan]) -> CGFloat {
-        guard let timing = state.timing else { return 0 }
-        let time = timing.now()
-        if time >= timing.endMs { return width(line) }
-        if spans.isEmpty { return width(line) * timing.progress(at: time) }
-        let length = (text as NSString).length
-        var result: CGFloat = 0
-        for span in spans {
-            guard span.start >= 0, span.end <= length, span.end > span.start else { continue }
-            if time < span.startMs { break }
-            let start = CTLineGetOffsetForStringIndex(line, span.start, nil), end = CTLineGetOffsetForStringIndex(line, span.end, nil)
-            let fraction = CGFloat(min(1, max(0, (time - span.startMs) / max(1, span.endMs - span.startMs))))
-            result = start + (end - start) * fraction
-            if time < span.endMs { break }
+    func textPaintSections(_ text: String, color: NSColor, spans: [TimedSpan], inlineTranslationColor: NSColor? = nil) -> [TextPaintSection] {
+        let separator = inlineBilingualSeparator
+        guard let inlineTranslationColor, !state.original.isEmpty, !state.translation.isEmpty,
+              text == state.original + separator + state.translation else {
+            return [TextPaintSection(range: NSRange(location: 0, length: (text as NSString).length), color: color, spans: spans)]
         }
-        return result
+        let originalLength = (state.original as NSString).length, separatorLength = (separator as NSString).length
+        return [
+            TextPaintSection(range: NSRange(location: 0, length: originalLength), color: color, spans: spans),
+            TextPaintSection(range: NSRange(location: originalLength, length: separatorLength), color: color, spans: [], followsProgress: false),
+            TextPaintSection(range: NSRange(location: originalLength + separatorLength, length: (state.translation as NSString).length),
+                             color: inlineTranslationColor, spans: state.timing?.secondary ?? []),
+        ]
     }
     private func visibleLine(_ line: CTLine, size: CGFloat) -> CTLine {
         let available = max(0, bounds.width - 12)
@@ -212,7 +250,7 @@ final class LyricView: NSView {
         }
         return line
     }
-    private func drawText(_ text: String, baseline: CGFloat, size: CGFloat, color: NSColor, alpha: CGFloat, spans: [TimedSpan], center: Bool, opticalCenter: Bool = false) {
+    private func drawText(_ text: String, baseline: CGFloat, size: CGFloat, color: NSColor, alpha: CGFloat, spans: [TimedSpan], center: Bool, opticalCenter: Bool = false, inlineTranslationColor: NSColor? = nil) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         let full = makeLine(text, size: size), fullWidth = width(full), rect = bounds.insetBy(dx: 6, dy: 0)
         let visible = visibleLine(full, size: size)
@@ -224,18 +262,30 @@ final class LyricView: NSView {
             x -= CGFloat(elapsed * config.scrollSpeed).truncatingRemainder(dividingBy: fullWidth + 30)
         }
         let progressive = config.progressiveHighlight && state.reason == "lyric" && state.timing != nil
-        let painted = cutoff(full, text: text, spans: spans)
+        let sections = textPaintSections(text, color: color, spans: spans, inlineTranslationColor: inlineTranslationColor)
+        let time = state.timing?.now() ?? 0
         context.saveGState(); context.clip(to: rect); context.textMatrix = .identity
         let scale = window?.backingScaleFactor ?? 2
         let alignedBaseline = opticalCenter ? opticalTextBaseline(centerY: baseline, ink: textInkBounds(visible)) : baseline
         let y = (alignedBaseline * scale).rounded() / scale
         for origin in scroll ? [x, x + fullWidth + 30] : [x] {
-            context.setFillColor(color.withAlphaComponent(alpha * (progressive ? config.unplayedOpacity : 1)).cgColor)
-            context.textPosition = CGPoint(x: origin, y: y); CTLineDraw(visible, context)
-            if progressive && painted > 0 {
-                context.saveGState(); context.clip(to: CGRect(x: origin, y: rect.minY, width: painted, height: rect.height))
-                context.setFillColor(color.withAlphaComponent(alpha).cgColor)
-                context.textPosition = CGPoint(x: origin, y: y); CTLineDraw(visible, context); context.restoreGState()
+            for section in sections {
+                let start = CTLineGetOffsetForStringIndex(full, section.range.location, nil)
+                let end = CTLineGetOffsetForStringIndex(full, NSMaxRange(section.range), nil)
+                let animated = progressive && section.followsProgress
+                context.saveGState()
+                if sections.count > 1 {
+                    context.clip(to: CGRect(x: origin + min(start, end), y: rect.minY, width: abs(end - start), height: rect.height))
+                }
+                context.setFillColor(section.color.withAlphaComponent(alpha * (animated ? config.unplayedOpacity : 1)).cgColor)
+                context.textPosition = CGPoint(x: origin, y: y); CTLineDraw(visible, context)
+                if animated, let timing = state.timing {
+                    let painted = textHighlightEnd(full, range: section.range, spans: section.spans, timing: timing, at: time)
+                    context.clip(to: CGRect(x: origin + min(start, painted), y: rect.minY, width: abs(painted - start), height: rect.height))
+                    context.setFillColor(section.color.withAlphaComponent(alpha).cgColor)
+                    context.textPosition = CGPoint(x: origin, y: y); CTLineDraw(visible, context)
+                }
+                context.restoreGState()
             }
         }
         context.restoreGState()

@@ -1,3 +1,5 @@
+const INLINE_BILINGUAL_SEPARATOR = '  ';
+
 export const DEFAULTS = Object.freeze({
   enabled: true, maxWidth: 280,
   displayMode: 'translation', fontSize: 13, fontWeight: 'medium',
@@ -143,13 +145,12 @@ function lineTiming(snapshot, lines, index, config, now, timelineMs, sample) {
   const lastCharacterEnd = Math.max(0, ...line.originalTiming.map(x => x.endMs));
   const endMs = lastCharacterEnd > line.startMs ? lastCharacterEnd : next?.startMs ?? Math.max(line.startMs + 1000, Number(p.duration || 0) * 1000);
   const originalFirst = config.displayMode !== 'translation' || !line.translation;
-  const inlineBilingual = config.displayMode === 'bilingualInline' && !!line.translation;
-  const doubleBilingual = config.displayMode === 'bilingual' && !!line.translation;
+  const bilingual = ['bilingual', 'bilingualInline'].includes(config.displayMode) && !!line.translation;
   return {
     timelineMs, sampledAt: now, startMs: line.startMs, endMs,
     advancing: sample.advancing, rate: sample.rate, advanceLimitMs: sample.advanceLimitMs,
-    primary: inlineBilingual ? [] : originalFirst ? line.originalTiming : line.translationTiming,
-    secondary: doubleBilingual ? line.translationTiming : [],
+    primary: originalFirst ? line.originalTiming : line.translationTiming,
+    secondary: bilingual ? line.translationTiming : [],
   };
 }
 
@@ -205,7 +206,7 @@ export function displayState(snapshot, lines, hidden, config, now = Date.now(), 
     base.original = line.original; base.translation = line.translation; base.reason = 'lyric';
     if (config.displayMode === 'translation') base.primary = line.translation || line.original;
     else if (config.displayMode === 'bilingual') { base.primary = line.original; base.secondary = line.translation; }
-    else if (config.displayMode === 'bilingualInline') base.primary = [line.original, line.translation].filter(Boolean).join('  ·  ');
+    else if (config.displayMode === 'bilingualInline') base.primary = [line.original, line.translation].filter(Boolean).join(INLINE_BILINGUAL_SEPARATOR);
     else base.primary = line.original;
     base.timing = lineTiming(snapshot, lines, index, config, now, timeline, sample);
   } else {

@@ -8,7 +8,8 @@ final class LayoutCoordinator {
     func start() { update() }
 
     func update() {
-        guard let controller, !stopped else { return }
+        // Keep the menu's anchor still until its tracking session has finished.
+        guard let controller, !stopped, !controller.statusView.contextMenuOpen else { return }
         let config = controller.config, state = controller.state
         controller.statusItem.isVisible = config.enabled && !state.hidden
         guard controller.statusItem.isVisible else {

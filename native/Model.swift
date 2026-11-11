@@ -1,6 +1,8 @@
 import AppKit
 import CoreText
 
+let inlineBilingualSeparator = "  "
+
 struct LyricsConfig: Codable, Equatable {
     var enabled = true
     var maxWidth = 280.0
@@ -74,6 +76,25 @@ struct PaintTiming: Codable, Equatable {
         timelineMs + (advancing ? min(advanceLimitMs, max(0, date.timeIntervalSince1970 * 1000 - sampledAt)) * rate : 0)
     }
     func progress(at time: Double) -> Double { min(1, max(0, (time - startMs) / max(1, endMs - startMs))) }
+}
+
+// Span indexes are local to one language; the range locates that language in the shaped line.
+func textHighlightEnd(_ line: CTLine, range: NSRange, spans: [TimedSpan], timing: PaintTiming, at time: Double) -> CGFloat {
+    let start = CTLineGetOffsetForStringIndex(line, range.location, nil)
+    let end = CTLineGetOffsetForStringIndex(line, NSMaxRange(range), nil)
+    if time >= timing.endMs { return end }
+    if spans.isEmpty { return start + (end - start) * CGFloat(timing.progress(at: time)) }
+    var result = start
+    for span in spans {
+        guard span.start >= 0, span.end <= range.length, span.end > span.start else { continue }
+        if time < span.startMs { break }
+        let from = CTLineGetOffsetForStringIndex(line, range.location + span.start, nil)
+        let to = CTLineGetOffsetForStringIndex(line, range.location + span.end, nil)
+        let fraction = CGFloat(min(1, max(0, (time - span.startMs) / max(1, span.endMs - span.startMs))))
+        result = from + (to - from) * fraction
+        if time < span.endMs { break }
+    }
+    return result
 }
 
 func compactControlFrames(in bounds: NSRect) -> [NSRect] {

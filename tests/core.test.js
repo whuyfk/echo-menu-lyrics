@@ -148,9 +148,36 @@ test('inline bilingual mode stays on one native text line', () => {
   const lines = normalizeLines(snapshot), hidden = [false, false, false];
   const p = { ...snapshot, playback: { ...snapshot.playback, isPlaying: false, currentTime: 5 } };
   const state = displayState(p, lines, hidden, { ...config, displayMode: 'bilingualInline' }, 1000);
-  assert.equal(state.primary, 'A real lyric  ·  真正的歌词');
+  assert.equal(state.primary, 'A real lyric  真正的歌词');
   assert.equal(state.secondary, '');
   assert.deepEqual(state.timing.primary, []);
+});
+test('inline bilingual keeps independent original and translation timing on the same clock', () => {
+  const s = structuredClone(snapshot);
+  s.playback = { ...s.playback, currentTime: 2, isPlaying: false };
+  s.lyric.lines = [{ time: 1, text: 'A🌙', translated: '月光照耀',
+    characters: [{ text: 'A', startTime: 1000, endTime: 2000 }, { text: '🌙', startTime: 2000, endTime: 5000 }],
+    translatedCharacters: [{ text: '月光', startTime: 1000, endTime: 2500 }, { text: '照耀', startTime: 2500, endTime: 5000 }] }];
+  const settings = { ...config, displayMode: 'bilingualInline' };
+  const lines = normalizeLines(s);
+  const state = displayState(s, lines, [], settings, 1000);
+  assert.equal(state.primary, 'A🌙  月光照耀'); assert.equal(state.secondary, '');
+  assert.deepEqual(state.timing.primary, lines[0].originalTiming);
+  assert.deepEqual(state.timing.secondary, lines[0].translationTiming);
+  assert.deepEqual(state.timing.primary.map(x => [x.start, x.end]), [[0, 1], [1, 3]]);
+  assert.equal(state.timing.timelineMs, 2000); assert.equal(state.timing.endMs, 5000);
+
+  lines[0].translationTiming = [];
+  const estimated = displayState(s, lines, [], settings, 1000);
+  assert.deepEqual(estimated.timing.primary, state.timing.primary);
+  assert.deepEqual(estimated.timing.secondary, []);
+  assert.equal(estimated.timing.startMs, 1000); assert.equal(estimated.timing.endMs, 5000);
+
+  lines[0].translation = '';
+  const originalOnly = displayState(s, lines, [], settings, 1000);
+  assert.equal(originalOnly.primary, 'A🌙'); assert.equal(originalOnly.secondary, '');
+  assert.deepEqual(originalOnly.timing.primary, state.timing.primary);
+  assert.deepEqual(originalOnly.timing.secondary, []);
 });
 test('bilingual mode keeps two native lines and translation timing', () => {
   const s = structuredClone(snapshot);

@@ -1,4 +1,5 @@
 (() => {
+  const inlineBilingualSeparator = '  ';
   const $ = selector => document.querySelector(selector);
   let socket, config = {}, state = {}, sequence = 0, reconnect, filterDirty = false;
   const pendingFilters = new Set();
@@ -92,6 +93,8 @@
     const primary=mode==='cover'?cover:mode==='custom'?(config.displayMode==='translation'?config.translationColor:config.originalColor):null;
     const secondary=mode==='cover'?cover:mode==='custom'?config.translationColor:null;
     $('#lyric').style.color=primary||'';$('#secondary').style.color=secondary||'';
+    const inlineTranslation=$('#lyric [data-inline-translation]');
+    if(inlineTranslation)inlineTranslation.style.color=secondary||'';
     const waiting=mode==='cover'&&state.coverColorPending&&!cover;
     $('#lyric').style.visibility=waiting?'hidden':'';$('#secondary').style.visibility=waiting?'hidden':'';
     document.querySelectorAll('.playback button').forEach(button=>{button.style.color=primary||'';});
@@ -99,7 +102,12 @@
   function renderState(value) {
     if (typeof value.appearanceDark === 'boolean') document.documentElement.dataset.theme = value.appearanceDark ? 'dark' : 'light';
     state=value;$('#song').textContent=[value.title||'EchoMusic',value.artist].filter(Boolean).join(' · ');
-    $('#lyric').textContent=value.primary||(value.hidden?'歌词已收起':'暂无歌词');$('#secondary').textContent=value.secondary||'';
+    const lyric=$('#lyric');
+    if(config.displayMode==='bilingualInline'&&value.original&&value.translation&&value.primary===value.original+inlineBilingualSeparator+value.translation){
+      const translation=element('span',value.translation);translation.dataset.inlineTranslation='';
+      lyric.replaceChildren(document.createTextNode(value.original+inlineBilingualSeparator),translation);
+    }else lyric.textContent=value.primary||(value.hidden?'歌词已收起':'暂无歌词');
+    $('#secondary').textContent=value.secondary||'';
     const modes={sequential:'顺序播放',list:'列表循环',random:'随机播放',single:'单曲循环'};
     const mode=modes[value.playMode]?value.playMode:'list';$('#play-mode').innerHTML=modeIcons[mode];$('#play-mode').title='播放模式：'+modes[mode]+'（点击切换）';$('#play-mode').setAttribute('aria-label',$('#play-mode').title);
     $('#play').textContent=value.isPlaying?'Ⅱ':'▶';$('#favorite').textContent=value.isFavorite?'♥':'♡';

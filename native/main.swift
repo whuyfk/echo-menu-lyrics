@@ -63,11 +63,35 @@ func selfTest() {
     var controlsState = LyricState(); controlsState.hasTrack = true
     controlsView.update(state: controlsState, config: LyricsConfig())
     precondition(controlsView.visiblePlaybackCommands.isEmpty)
-    controlsView.hovered = true
+    controlsView.setHovered(true)
     controlsView.update(state: controlsState, config: LyricsConfig())
     precondition(controlsView.visiblePlaybackCommands == playbackCommands)
     controlsView.update(state: controlsState, config: LyricsConfig(), compact: true)
     precondition(controlsView.visiblePlaybackCommands.isEmpty)
+    for mode in ["original", "translation", "bilingualInline", "bilingual"] {
+        var menuConfig = LyricsConfig(); menuConfig.displayMode = mode
+        controlsView.update(state: controlsState, config: menuConfig)
+        controlsView.setHovered(true)
+        precondition(controlsView.visiblePlaybackCommands == playbackCommands)
+        controlsView.beginContextMenu()
+        precondition(controlsView.contextMenuOpen && !controlsView.hovered && controlsView.visiblePlaybackCommands.isEmpty)
+        // Enter events delivered during menu tracking must not re-enable the toolbar.
+        controlsView.setHovered(true)
+        controlsView.update(state: controlsState, config: menuConfig)
+        precondition(!controlsView.hovered && controlsView.visiblePlaybackCommands.isEmpty)
+        controlsView.endContextMenu()
+        precondition(!controlsView.contextMenuOpen && !controlsView.hovered && controlsView.visiblePlaybackCommands.isEmpty)
+    }
+    // Simulate a lost exit event: the view still says hovered, but its window isn't visible.
+    controlWindow.contentView = controlsView
+    controlsView.setHovered(true)
+    let hoverDeadline = Date(timeIntervalSinceNow: 0.4)
+    while controlsView.hovered && Date() < hoverDeadline {
+        _ = RunLoop.main.run(mode: .eventTracking, before: hoverDeadline)
+    }
+    precondition(!controlsView.hovered && controlsView.visiblePlaybackCommands.isEmpty)
+    controlWindow.contentView = nil
+    print("PASS: mode menus clear hover and recover missing exit events in the event-tracking run loop")
     controlsState.hasTrack = false
     controlsView.update(state: controlsState, config: LyricsConfig())
     precondition(controlsView.visiblePlaybackCommands.isEmpty)
@@ -75,6 +99,30 @@ func selfTest() {
     let timing = PaintTiming(timelineMs: 1500, sampledAt: 1000, startMs: 1000, endMs: 3000, advancing: false, rate: 1, advanceLimitMs: 1800, primary: [], secondary: [])
     precondition(timing.progress(at: 1000) == 0 && timing.progress(at: 2000) == 0.5 && timing.progress(at: 3000) == 1)
     precondition(timing.now(Date(timeIntervalSince1970: 10)) == 1500)
+    var inlineConfig = LyricsConfig(); inlineConfig.displayMode = "bilingualInline"
+    var inlineState = LyricState(); inlineState.original = "A🌙"; inlineState.translation = "月光照耀"
+    inlineState.primary = inlineState.original + inlineBilingualSeparator + inlineState.translation
+    inlineState.timing = PaintTiming(timelineMs: 2000, sampledAt: 0, startMs: 0, endMs: 4000, advancing: false, rate: 1, advanceLimitMs: 0,
+                                    primary: [TimedSpan(start: 0, end: 1, startMs: 0, endMs: 1000), TimedSpan(start: 1, end: 3, startMs: 1000, endMs: 4000)],
+                                    secondary: [TimedSpan(start: 0, end: 2, startMs: 0, endMs: 1000), TimedSpan(start: 2, end: 4, startMs: 1000, endMs: 4000)])
+    bilingualView.update(state: inlineState, config: inlineConfig)
+    let sections = bilingualView.textPaintSections(inlineState.primary, color: .red, spans: inlineState.timing!.primary, inlineTranslationColor: .blue)
+    precondition(sections.map { $0.range } == [NSRange(location: 0, length: 3), NSRange(location: 3, length: 2), NSRange(location: 5, length: 4)])
+    precondition(sections.map { $0.followsProgress } == [true, false, true])
+    precondition(sections[0].color == .red && sections[2].color == .blue)
+    let inlineLine = CTLineCreateWithAttributedString(NSAttributedString(string: inlineState.primary, attributes: [.font: NSFont.systemFont(ofSize: 14)]))
+    for section in [sections[0], sections[2]] {
+        let start = CTLineGetOffsetForStringIndex(inlineLine, section.range.location, nil)
+        let end = CTLineGetOffsetForStringIndex(inlineLine, NSMaxRange(section.range), nil)
+        let half = textHighlightEnd(inlineLine, range: section.range, spans: section.spans, timing: inlineState.timing!, at: 2000)
+        precondition(half > start && half < end)
+        precondition(textHighlightEnd(inlineLine, range: section.range, spans: section.spans, timing: inlineState.timing!, at: 0) == start)
+        precondition(textHighlightEnd(inlineLine, range: section.range, spans: section.spans, timing: inlineState.timing!, at: 4000) == end)
+        let fallback = textHighlightEnd(inlineLine, range: section.range, spans: [], timing: inlineState.timing!, at: 2000)
+        precondition(abs(fallback - (start + end) / 2) < 0.001)
+    }
+    precondition(bilingualView.textPaintSections("A🌙", color: .red, spans: [], inlineTranslationColor: .blue).count == 1)
+    print("PASS: inline bilingual paints both UTF-16 ranges independently and keeps the spacing between languages")
     print("PASS: status-item controls, content fitting, progressive timing, and config defaults")
 }
 
@@ -87,6 +135,14 @@ func renderChecks(_ directory: String) {
         ("single-half", "月光落在你经过的窗前", "", 2000, false, 180),
         ("single-played", "月光落在你经过的窗前", "", 4000, false, 180),
         ("bilingual-half", "Moonlight falls by your window", "月光落在你经过的窗前", 2000, false, 230),
+        ("inline-unplayed", "Moonlight falls  月光轻轻落下", "", 0, false, 300),
+        ("inline-half", "Moonlight falls  月光轻轻落下", "", 2000, false, 300),
+        ("inline-played", "Moonlight falls  月光轻轻落下", "", 4000, false, 300),
+        ("inline-no-highlight", "Moonlight falls  月光轻轻落下", "", 0, false, 300),
+        ("inline-ellipsis", "Moonlight falls  月光轻轻落下", "", 2000, false, 180),
+        ("inline-scroll", "Moonlight falls  月光轻轻落下", "", 2000, false, 180),
+        ("inline-words", "Moonlight falls  月光轻轻落下", "", 2000, false, 300),
+        ("inline-no-translation", "Moonlight falls", "", 2000, false, 180),
         ("hover-wide", "月光落在你经过的窗前", "", 2000, true, 500),
         ("hover-128", "为你写诗", "", 0, true, 128),
         ("hover-mode-sequential", "为你写诗", "", 0, true, 180),
@@ -109,10 +165,22 @@ func renderChecks(_ directory: String) {
         if name.hasPrefix("hover-mode-") { state.playMode = String(name.dropFirst("hover-mode-".count)); state.isFavorite = true }
         state.timing = PaintTiming(timelineMs: progress, sampledAt: 0, startMs: 0, endMs: 4000, advancing: false, rate: 1, advanceLimitMs: 0, primary: [], secondary: [])
         var localConfig = config
+        if name.hasPrefix("inline-") {
+            localConfig.displayMode = "bilingualInline"
+            state.original = "Moonlight falls"
+            if name != "inline-no-translation" { state.translation = "月光轻轻落下" }
+            if name == "inline-no-highlight" { localConfig.progressiveHighlight = false }
+            if name == "inline-scroll" { localConfig.longLine = "scroll" }
+            if name == "inline-words" {
+                state.timing?.primary = [TimedSpan(start: 0, end: 9, startMs: 0, endMs: 1000), TimedSpan(start: 10, end: 15, startMs: 1000, endMs: 4000)]
+                state.timing?.secondary = [TimedSpan(start: 0, end: 2, startMs: 0, endMs: 1000), TimedSpan(start: 2, end: 6, startMs: 1000, endMs: 4000)]
+            }
+        }
         if name.hasPrefix("alignment-") || name.hasPrefix("bilingual-") { localConfig.fontSize = 14 }
         if name.hasPrefix("cover-") { localConfig.colorMode = "cover" }
         if name == "cover-color" { state.coverColor = "#4C8DB2" }
-        view.update(state: state, config: localConfig); view.hovered = hover
+        view.update(state: state, config: localConfig); view.setHovered(hover)
+        if name == "inline-scroll" { Thread.sleep(forTimeInterval: 4) }
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(width * 2), pixelsHigh: Int(height * 2), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         bitmap.size = NSSize(width: width, height: height)
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)

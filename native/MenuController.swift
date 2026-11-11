@@ -64,7 +64,7 @@ final class MenuController: NSObject {
             config = LyricsConfig.from(values, base: config)
             if config.displayMode == "original" { state.primary = state.original; state.secondary = "" }
             else if config.displayMode == "bilingual" { state.primary = state.original; state.secondary = state.translation }
-            else if config.displayMode == "bilingualInline" { state.primary = [state.original, state.translation].filter { !$0.isEmpty }.joined(separator: "  ·  "); state.secondary = "" }
+            else if config.displayMode == "bilingualInline" { state.primary = [state.original, state.translation].filter { !$0.isEmpty }.joined(separator: inlineBilingualSeparator); state.secondary = "" }
             else { state.primary = state.translation; state.secondary = "" }
             layout.update()
         } else {
@@ -91,6 +91,9 @@ final class MenuController: NSObject {
         bridge?.send(["type": "command", "command": name, "trackId": state.trackId, "id": UUID().uuidString])
     }
     func showContextMenu(event: NSEvent, view: NSView) {
+        guard !statusView.contextMenuOpen else { return }
+        statusView.beginContextMenu()
+        defer { statusView.endContextMenu() }
         let menu = NSMenu()
         for text in [state.original, state.translation].filter({ !$0.isEmpty }) {
             let item = NSMenuItem(title: text, action: nil, keyEquivalent: ""); item.isEnabled = false; menu.addItem(item)
