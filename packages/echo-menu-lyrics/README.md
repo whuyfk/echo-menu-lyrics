@@ -3,7 +3,7 @@
 为 [EchoMusic](https://github.com/hoowhoami/EchoMusicPlugins) 提供 macOS 原生状态栏歌词。
 鼠标移入歌词，原位置显示 **播放模式、上一首、播放／暂停、下一首、收藏**；移出恢复歌词。
 
-**0.4.6 开发预览版 · macOS 13+ · EchoMusic 2.3.2+ · MIT**
+**0.4.7 开发预览版 · macOS 13+ · EchoMusic 2.3.2+ · MIT**
 
 ## 功能
 
@@ -38,7 +38,7 @@ https://github.com/whuyfk/echo-menu-lyrics
 首次启动或程序文件更新后，EchoMusic 会请求原生程序运行确认。
 插件不请求辅助功能或屏幕录制权限。
 
-如果通过插件市场安装后没有出现运行确认，请打开歌词设置。插件会检测原生组件是否缺少执行权限，并提供可复制的修复命令。
+如果通过插件市场安装后没有出现运行确认，请打开歌词设置。页面顶部会显示两步修复流程：先复制命令到终端执行，再点击重启菜单栏组件。
 
 **预编译组件为 ad-hoc 签名，未做 Developer ID 签名及公证。**
 跨设备首次运行可能受系统限制；运行条件、实际测试范围及尚待验证的场景见
@@ -86,7 +86,7 @@ npm run check:generated
 - `plugin/src/`、`plugin/ui/`：播放器桥接、歌词逻辑及共用设置页。
 - `native/`：Swift / AppKit / Core Text 原生渲染与状态栏交互。
 - `packages/echo-menu-lyrics/`：可直接安装的构建目录，供在线插件源从仓库 ZIP 提取。
-- `dist/echo-menu-lyrics-0.4.6-macos.zip`：本机构建的分发 ZIP，不纳入 Git。
+- `dist/echo-menu-lyrics-0.4.7-macos.zip`：本机构建的分发 ZIP，不纳入 Git。
 - `scripts/`：构建、打包、校验及本地安装；`tests/`：自动检查。
 
 修改源码后运行上述完整命令，提交源码和更新后的 `packages/echo-menu-lyrics/`。

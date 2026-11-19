@@ -29,6 +29,55 @@
   const patch = values => send('configure', { patch: values });
   const patterns = () => $('#filters').value.split('\n').map(x => x.trim()).filter(Boolean);
   const element = (tag, text, cls) => { const e = document.createElement(tag); if (text) e.textContent = text; if (cls) e.className = cls; return e; };
+  const launchBanner=$('#launch-banner'), launchTitle=$('#launch-title'), launchMessage=$('#launch-message');
+  const copyStep=$('#copy-step'), copyRepair=$('#copy-repair'), copyHelp=$('#copy-help');
+  const repairCommand=$('#repair-command'), restartNative=$('#restart-native');
+  let currentRepairCommand='', restartRequested=false;
+  function setRestartPending(pending) {
+    restartNative.disabled=pending;
+    restartNative.textContent=pending?'正在重启…':'我已执行，重启组件';
+  }
+  function requestRestart() {
+    restartRequested=true;
+    setRestartPending(true);
+    if(!send('nativeAction',{action:'restart'})){
+      restartRequested=false;
+      setRestartPending(false);
+    }
+  }
+  copyRepair.addEventListener('click',async()=>{
+    if(!currentRepairCommand)return;
+    const copied=await copyText(currentRepairCommand);
+    copyRepair.textContent=copied?'已复制':'重新复制';
+    copyHelp.textContent=copied
+      ? '命令已复制。请打开“终端”粘贴并回车，完成后执行第 2 步。'
+      : '无法自动复制，请展开下方命令并手动复制。';
+    message(copied?'第 1 步已完成，请到终端执行命令':'无法自动复制，请手动选择命令',!copied);
+  });
+  restartNative.addEventListener('click',requestRestart);
+  function renderLaunch(value) {
+    if(!value){launchBanner.hidden=true;return;}
+    const problem=['permission-denied','authorization-cancelled','failed','disconnected'].includes(value.state);
+    const pending=restartRequested&&['launching','connecting'].includes(value.state);
+    launchBanner.hidden=!(problem||pending);
+    if(!(problem||pending)){restartRequested=false;setRestartPending(false);return;}
+
+    launchBanner.dataset.state=value.state||'';
+    launchTitle.textContent=value.state==='permission-denied'?'需要修复原生组件权限':
+      value.state==='authorization-cancelled'?'启动授权已取消':
+      pending?'正在重启菜单栏组件':
+      value.state==='disconnected'?'菜单栏组件已断开':'菜单栏组件启动失败';
+    launchMessage.textContent=value.state==='permission-denied'
+      ? '插件市场安装时没有保留原生程序的执行权限。按下面两步操作即可恢复。'
+      : value.message||'请按下面步骤重新启动组件。';
+    currentRepairCommand=value.repairCommand||(pending?currentRepairCommand:'');
+    repairCommand.textContent=currentRepairCommand;
+    copyStep.hidden=!currentRepairCommand||pending;
+    copyRepair.textContent='复制命令';
+    copyHelp.textContent='复制后，在 macOS「终端」中粘贴并回车。';
+    setRestartPending(pending);
+    if(!pending)restartRequested=false;
+  }
   const formatNumber = (key, value) => Number(Number(value).toFixed(['opacity', 'unplayedOpacity'].includes(key) ? 2 : ['fontSize', 'scrollDelay'].includes(key) ? 1 : 0));
   function card(panel, title) { const e = element('section', '', 'card'); e.append(element('h2', title)); panel.append(e); return e; }
   function field(parent, key, title, type, extra, detail) {
@@ -53,31 +102,8 @@
   field(c, 'scrollSpeed', '滚动速度（点/秒）', 'number', {min:8,max:100});
   field(c, 'scrollDelay', '滚动前停留（秒）', 'number', {min:0,max:8,step:.5});
   c = card(panels.display, '显示方式'); c.append(element('p', '歌词完全使用 macOS 原生状态栏项：跨桌面、全屏隐藏及鼠标移到顶部时恢复均由系统管理。双行模式使用原生状态栏高度自动缩放两层文字。'));
-  const launchStatus=element('div','','launch-status');launchStatus.hidden=true;
-  const launchMessage=element('div','','launch-message');
-  const repairCommand=element('code','','repair-command');repairCommand.hidden=true;
-  const copyRepair=element('button','复制修复命令');copyRepair.type='button';copyRepair.hidden=true;
-  launchStatus.append(launchMessage,repairCommand,copyRepair);c.append(launchStatus);
-  let currentRepairCommand='';
-  copyRepair.addEventListener('click',async()=>{
-    if(!currentRepairCommand)return;
-    const copied=await copyText(currentRepairCommand);
-    message(copied?'修复命令已复制':'无法自动复制，请手动选择命令',!copied);
-  });
-  function renderLaunch(value) {
-    if(!value){launchStatus.hidden=true;return;}
-    const visible=['launching','connecting','permission-denied','authorization-cancelled','failed','disconnected'].includes(value.state);
-    launchStatus.hidden=!visible;
-    if(!visible)return;
-    launchStatus.dataset.state=value.state||'';
-    launchMessage.textContent=value.message||'';
-    currentRepairCommand=value.repairCommand||'';
-    repairCommand.textContent=currentRepairCommand;
-    repairCommand.hidden=!currentRepairCommand;
-    copyRepair.hidden=!currentRepairCommand;
-  }
   const permissionActions=element('div','','actions');c.append(permissionActions);
-  const restart = element('button', '重启菜单栏组件'); restart.type = 'button'; restart.addEventListener('click', () => send('nativeAction', {action:'restart'})); permissionActions.append(restart);
+  const restart = element('button', '重启菜单栏组件'); restart.type = 'button'; restart.addEventListener('click', requestRestart); permissionActions.append(restart);
   c = card(panels.appearance, '文字');
   field(c, 'fontSize', '字号（点）', 'number', {min:9,max:24,step:.5}, '双行优先使用设置字号，超出实际菜单栏高度时才缩小');
   field(c, 'fontWeight', '字重', [['regular','常规'],['medium','中等'],['semibold','半粗'],['bold','粗体']]);

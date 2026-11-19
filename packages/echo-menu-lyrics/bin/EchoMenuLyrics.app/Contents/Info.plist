@@ -6,9 +6,9 @@
 <key>CFBundleDisplayName</key><string>EchoMusic 菜单栏歌词</string>
 <key>CFBundleExecutable</key><string>EchoMenuLyrics</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.4.6</string>
-<key>CFBundleVersion</key><string>19</string>
-<key>EchoMenuLyricsSourceDigest</key><string>f78f58766a7f1fe21cf2f0319f96f11fe67d3ef0a1d2fe15c8780accd8e82de3</string>
+<key>CFBundleShortVersionString</key><string>0.4.7</string>
+<key>CFBundleVersion</key><string>20</string>
+<key>EchoMenuLyricsSourceDigest</key><string>dcac9dd39ea95e239ab548451bce6aaad329a957374437e7c9019672a3513702</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
