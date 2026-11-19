@@ -2,10 +2,22 @@ import { DEFAULTS, CoverColorState, sanitizeConfig, validateFilters, normalizeLi
 import { FilterRunner } from './filters.js';
 import { registerSettings } from './settings.js';
 
+const missingExecutePermission = /可执行程序缺少执行权限|permission denied|EACCES/i;
+
+const shellQuote = value => `'${String(value).replaceAll("'", "'\\''")}'`;
+
+export function nativeRepairCommand(directory) {
+  const root = String(directory || '').replace(/\/+$/, '');
+  if (!root) return '';
+  const executable = `${root}/bin/EchoMenuLyrics.app/Contents/MacOS/EchoMenuLyrics`;
+  return `chmod 755 ${shellQuote(executable)}`;
+}
+
 export function createSession(ctx) {
   let config = sanitizeConfig(), snapshot = {}, lines = [], hidden = [], signature = '';
   let lastVisible = null, pausedAt = null, lastPlaying = null, disposed = false, helperPid = 0;
   let server = null, filterGeneration = 0, filterPending = false, currentState = null, status = '正在初始化…', launching = false;
+  let launchState = { state: 'idle', message: '等待启动菜单栏组件…', repairCommand: '' };
   let launchGeneration = 0, configureQueue = Promise.resolve();
   let displayTimer = null;
   const playerStore = ctx.player?.store;
@@ -16,9 +28,14 @@ export function createSession(ctx) {
   const secret = Array.from(crypto.getRandomValues(new Uint8Array(24)), x => x.toString(16).padStart(2, '0')).join('');
   const protocol = 'echo-lyrics.' + secret;
   const notify = () => listeners.forEach(fn => fn());
-  const setStatus = text => { status = text; notify(); };
   const send = (socket, message) => Promise.resolve(socket.send(JSON.stringify(message))).catch(() => { clients.delete(socket); });
   const broadcast = message => { if (!disposed) clients.forEach(socket => void send(socket, message)); };
+  const setLaunchState = (state, message, extra = {}) => {
+    launchState = { state, message, repairCommand: '', ...extra };
+    status = message;
+    broadcast({ type: 'launch', launch: launchState });
+    notify();
+  };
   const emit = () => {
     if (disposed) return;
     const playMode = ctx.player?.playMode?.value ?? snapshot.playback?.playMode;
@@ -101,22 +118,34 @@ export function createSession(ctx) {
     launching = true; const generation = ++launchGeneration;
     try {
       if (helperPid) { await ctx.process.terminate(helperPid); helperPid = 0; }
-      setStatus('等待启动菜单栏组件；首次启动会出现 EchoMusic 原生程序授权提示。');
+      setLaunchState('launching', '等待启动菜单栏组件；首次启动会出现 EchoMusic 原生程序授权提示。');
       const result = await ctx.process.launch({
         executable: 'bin/EchoMenuLyrics.app/Contents/MacOS/EchoMenuLyrics',
         args: showSettings ? ['--settings'] : [], env: { ECHO_LYRICS_ENDPOINT: server.origin.replace(/^http/, 'ws') + '/live', ECHO_LYRICS_PROTOCOL: protocol },
       });
       if (disposed || generation !== launchGeneration) { if (result.ok) await ctx.process.terminate(result.pid); return; }
-      if (result.ok) { helperPid = result.pid; setStatus(nativeClients.size ? '菜单栏组件已连接' : '组件已启动，正在连接…'); }
-      else setStatus(result.canceled ? '启动授权已取消，可点击启动按钮重试。' : result.error || '菜单栏组件启动失败');
-    } catch (error) { setStatus(error.message); } finally { launching = false; }
+      if (result.ok) {
+        helperPid = result.pid;
+        setLaunchState(nativeClients.size ? 'connected' : 'connecting', nativeClients.size ? '菜单栏组件已连接' : '组件已启动，正在连接…');
+      } else {
+        const message = result.canceled ? '启动授权已取消，可点击“重启菜单栏组件”重试。' : result.error || '菜单栏组件启动失败';
+        const permissionDenied = missingExecutePermission.test(message);
+        setLaunchState(permissionDenied ? 'permission-denied' : result.canceled ? 'authorization-cancelled' : 'failed', message, {
+          repairCommand: permissionDenied ? nativeRepairCommand(ctx.descriptor?.directory) : '',
+        });
+        ctx.toast?.warning(`菜单栏歌词：${message}`);
+      }
+    } catch (error) {
+      setLaunchState('failed', error.message || '菜单栏组件启动失败');
+      ctx.toast?.warning(`菜单栏歌词：${error.message || '菜单栏组件启动失败'}`);
+    } finally { launching = false; }
   };
   const handleMessage = async (socket, raw) => {
     if (typeof raw !== 'string' || raw.length > 65536 || disposed) return;
     let message; try { message = JSON.parse(raw); } catch { return; }
     try {
       if (message.type === 'hello') {
-        if (message.role === 'native') { nativeClients.add(socket); setStatus('菜单栏组件已连接'); }
+        if (message.role === 'native') { nativeClients.add(socket); setLaunchState('connected', '菜单栏组件已连接'); }
       } else if (message.type === 'nativeAction') {
         if (!['showSettings', 'restart'].includes(message.action)) throw new Error('未知界面操作');
         if (message.action === 'restart') await launch();
@@ -173,8 +202,12 @@ export function createSession(ctx) {
           clients.add(socket);
           void send(socket, { type: 'config', config });
           if (currentState) void send(socket, { type: 'state', state: JSON.parse(currentState) });
+          void send(socket, { type: 'launch', launch: launchState });
           socket.onMessage(event => { void handleMessage(socket, event.data); });
-          socket.onClose(() => { clients.delete(socket); nativeClients.delete(socket); if (!disposed && !nativeClients.size) setStatus('菜单栏组件已断开，可从设置中重新启动。'); });
+          socket.onClose(() => {
+            clients.delete(socket); nativeClients.delete(socket);
+            if (!disposed && !nativeClients.size) setLaunchState('disconnected', '菜单栏组件已断开，可从设置中重新启动。');
+          });
           return () => { clients.delete(socket); nativeClients.delete(socket); };
         },
       });

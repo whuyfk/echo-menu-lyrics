@@ -6,9 +6,11 @@ globalThis.Worker = BrowserWorker;
 
 function fixture(overrides = {}) {
   const snapshot = { playback: { trackId: 'one', title: 'Song', isPlaying: false }, lyric: { trackId: 'one', lines: [{ time: 0, text: 'hello', translated: '你好' }], revision: 1 } };
-  const data = { commands: [], saved: [], terminated: [], options: null, subscriber: null, closed: 0 };
+  const data = { commands: [], saved: [], terminated: [], toasts: [], options: null, subscriber: null, closed: 0 };
   const ctx = {
     electron: { platform: 'darwin' }, storage: { get: async () => null, set: async (key, value) => data.saved.push(structuredClone(value)) },
+    descriptor: { directory: '/Users/test/Library/Application Support/echo-music/plugins/echo-menu-lyrics' },
+    toast: { warning: value => data.toasts.push(value) },
     nowPlaying: { getSnapshot: async () => snapshot, onSnapshot: fn => { data.subscriber = fn; return () => { data.subscriber = null; }; }, command: value => data.commands.push(value) },
     webServer: { onConnection() {}, listen: async options => { data.options = options; return { ok: true, origin: 'http://127.0.0.1:12345' }; }, close: async () => { data.closed++; } },
     process: { launch: async options => { data.launchOptions = options; return { ok: true, pid: 123 }; }, terminate: async pid => data.terminated.push(pid), ...overrides },
@@ -149,4 +151,29 @@ test('disabling while the host launch dialog is pending terminates any late-star
   const session = createSession(ctx); const start = session.start();
   await turn(); await session.dispose(); complete({ ok: true, pid: 456 }); await start;
   assert.deepEqual(data.terminated, [456]); assert.equal(data.closed, 1);
+});
+test('missing executable permission exposes a copyable repair command and recovers after native hello', async () => {
+  const { ctx, data, socket } = fixture({
+    launch: async () => ({ ok: false, error: '可执行程序缺少执行权限' }),
+  });
+  ctx.descriptor.directory = "/Users/test/Plugin's Echo";
+  const session = createSession(ctx);
+  try {
+    await session.start();
+    data.options.onConnection(socket);
+    const launch = await waitForMessage(socket, 'launch');
+    assert.equal(launch.launch.state, 'permission-denied');
+    assert.equal(
+      launch.launch.repairCommand,
+      "chmod 755 '/Users/test/Plugin'\\''s Echo/bin/EchoMenuLyrics.app/Contents/MacOS/EchoMenuLyrics'",
+    );
+    assert.equal(data.toasts.length, 1);
+    assert.match(data.toasts[0], /缺少执行权限/);
+
+    socket.receive({ data: JSON.stringify({ type: 'hello', role: 'native' }) });
+    await turn();
+    const latest = socket.messages.filter(value => value.type === 'launch').at(-1);
+    assert.equal(latest.launch.state, 'connected');
+    assert.equal(latest.launch.message, '菜单栏组件已连接');
+  } finally { await session.dispose(); }
 });
